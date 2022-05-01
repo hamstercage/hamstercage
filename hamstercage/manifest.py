@@ -58,7 +58,7 @@ class Entry(ABC):
                 return SymlinkEntry.from_dict(path, {
                     'target': str(e.resolve())
                 })
-            raise HamstercageException(f'Unable to create entry for {path}: unknown file type')
+            raise HamstercageException(f'Unable to create entry for "{path}": unknown file type')
 
         t = e.get('type', 'file')
         match t:

@@ -34,16 +34,17 @@ class Hamstercage:
         parser = argparse.ArgumentParser(prog='hamstercage', description='Manage the hamster cage.')
         parser.add_argument('-d', '--directory', type=Path, default='/', help='base directory of target files')
         parser.add_argument('-f', '--file', type=Path, default='hamstercage.yaml', help='manifest file to use')
+        parser.add_argument('-n', '--hostname', default=socket.gethostname(), help='name of this host')
         parser.add_argument('-r', '--repo', type=Path, default='.', help='directory of file repo')
         parser.add_argument('-t', '--tag', type=str, help='tags to apply/save')
-        parser.add_argument('-n', '--hostname', default=socket.gethostname(), help='name of this host')
+        parser.add_argument('-v', '--verbose', action='count', default=0, help='verbose output')
         parser.set_defaults(func=None)
 
         subparsers = parser.add_subparsers(help='sub-command help')
 
         subparser = subparsers.add_parser('add', help='add one or more files to the manifest')
         subparser.set_defaults(func=self.add)
-        subparser.add_argument('-A', '--allhosts', action='count', default=0, help='copy file to the all repository')
+        subparser.add_argument('-f', '--force', action='count', default=0, help='overwrite existing entries')
         subparser.add_argument('files', nargs='+', help='files to add')
 
         subparser = subparsers.add_parser('apply', help='apply files from repo to target')
@@ -61,6 +62,10 @@ class Hamstercage:
         subparser.set_defaults(func=self.list)
         subparser.add_argument('-l', '--long', action='count', default=0, help='list format long')
         subparser.add_argument('files', nargs='*', help='limit results to these file patterns')
+
+        subparser = subparsers.add_parser('remove', aliases=['del', 'rm'], help='remove one or more files from the manifest')
+        subparser.set_defaults(func=self.remove)
+        subparser.add_argument('files', nargs='+', help='files to remove')
 
         subparser = subparsers.add_parser('save', help='save target files to repo')
         subparser.set_defaults(func=self.save)
@@ -97,15 +102,7 @@ class Hamstercage:
             raise HamstercageException(f'Need to specify exactly one tag to add files to', 64)
 
         for file in args.files:
-            entry = self._add(file, self.tags[0])
-            if entry.has_repo():
-                repo = self._path_repo_absolute(self.tags[0], entry)
-                try:
-                    self._mkdir_repo(self._path_repo_relative(self.tags[0], entry).parent)
-                    shutil.copy2(entry.target, repo, follow_symlinks=False)
-                except FileNotFoundError as e:
-                    print(f'Unable to add {file}: {e}', file=sys.stderr)
-                    return(71)
+            entry = self._add_or_update(file, self.tags[0], ignore_existing=args.force > 0)
         self.manifest.dump()
         return 0
 
@@ -127,7 +124,7 @@ class Hamstercage:
         has_diff = False
         self.files = args.files
 
-        for (target, repo) in self._files().items():
+        for (target, repo) in self._tags_for_targets().items():
             if target.exists() and repo.exists():
                 diff = list(self._diff(target, repo))
                 sys.stdout.writelines(diff)
@@ -164,11 +161,34 @@ class Hamstercage:
         """
         self._load_manifest()
         self.files = args.files
-        for (target, repo) in self._files().items():
+        for (target, repo) in self._tags_for_targets().items():
             if args.long > 0:
                 print(f'{target} -> {repo}')
             else:
                 print(f'{target}')
+        return 0
+
+    def remove(self, args):
+        """
+        Remove one or more entries from the manifest.
+        :param args:
+        :return:
+        """
+        self._load_manifest()
+        if len(args.files) == 0:
+            raise HamstercageException(f'Need at least one file to remove', 64)
+        if len(self.tags) != 1:
+            raise HamstercageException(f'Need to specify exactly one tag to remove files from', 64)
+
+        for file in args.files:
+            if file in self.manifest.tags[self.tags[0]].entries:
+                repo = self._path_repo_absolute(self.tags[0], self.manifest.tags[self.tags[0]].entries[file])
+                del self.manifest.tags[self.tags[0]].entries[file]
+                repo.unlink()
+            else:
+                print(f'Unable to remove {file}: no such entry in tag {self.tags[0]}', file=sys.stderr)
+                return(71)
+        self.manifest.dump()
         return 0
 
     def save(self, args):
@@ -177,19 +197,32 @@ class Hamstercage:
         :return:
         """
         self._load_manifest()
-        for (target, repo) in self._files().items():
-            shutil.copy2(target, repo, follow_symlinks=False)
+        for (target, tag) in self._tags_for_targets().items():
+            self._add_or_update(target, tag, require_existing=True)
         return 0
 
-    def _add(self, path: str, tag: str, ignore_existing=False):
+    def _add_or_update(self, path: str, tag: str, ignore_existing=False, require_existing=False):
         if tag not in self.manifest.tags:
             raise HamstercageException(f'no tag {tag} in manifest')
         entries = self.manifest.tags[tag].entries
         target_path = self.target / path
         entry = Entry.entry(path, target_path)
-        if entry.path in entries and not ignore_existing:
-            raise HamstercageException(f'Unable to add {path}: already added')
+        if require_existing:
+            if entry.path not in entries:
+                raise HamstercageException(f'Unable to update {path}: no entry in manifest for tag {tag}')
+        elif not ignore_existing:
+            if entry.path in entries:
+                raise HamstercageException(f'Unable to add {path}: already added to tag {tag}')
         entries[path] = entry
+        if entry.has_repo():
+            repo = self._path_repo_absolute(self.tags[0], entry)
+            try:
+                self._mkdir_repo(self._path_repo_relative(self.tags[0], entry).parent)
+                shutil.copy2(entry.target, repo, follow_symlinks=False)
+                shutil.chown(repo, self.manifest.owner, self.manifest.group)
+                repo.chmod(self.manifest.file_mode)
+            except FileNotFoundError as e:
+                raise HamstercageException(f'Unable to add {path}to tag {tag}: {e}', e)
         return entry
 
     @staticmethod
@@ -205,7 +238,7 @@ class Hamstercage:
     def _exists_status(path):
         return ' ' if path else '!'
 
-    def _files_match(self, entry):
+    def _files_match(self, entry: Entry):
         if len(self.files) == 0:
             return True
         for f in self.files:
@@ -213,17 +246,19 @@ class Hamstercage:
                 return True
         return False
 
-    def _files(self) -> dict[Path, Path]:
+    def _tags_for_targets(self) -> dict[Path, str]:
         """
         Builds a list of files that should be processed. Resolved duplicate entries consistently.
         :return:
         """
-        files: dict[Path, Path] = {}
+        files: dict[Path, str] = {}
         for t in self.tags:
-            for p, e in self.manifest.tags[t].entries.items():
-                if not self._files_match(e):
+            for path, entry in self.manifest.tags[t].entries.items():
+                if not self._files_match(entry):
                     continue
-                files[self._path_target(e)] = self._path_repo_absolute(t, e)
+                if path in files:
+                    continue
+                files[path] = t
         return files
 
     @staticmethod
@@ -273,6 +308,7 @@ class Hamstercage:
             p.mkdir(mode=self.manifest.dir_mode)
             os.chmod(str(p), self.manifest.dir_mode, follow_symlinks=False)
             shutil.chown(str(p), self.manifest.owner, self.manifest.group)
+
 
 
 

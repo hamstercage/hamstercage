@@ -55,7 +55,6 @@ class TestHamstercage(TestCase):
         path_to_add = dut.target / dir_to_add
         path_to_add.mkdir()
 
-        Args = namedtuple('Args', 'files')
         args = Args(files=[dir_to_add])
         r = dut.add(args)
         self.assertEquals(0, r)
@@ -85,9 +84,8 @@ class TestHamstercage(TestCase):
         file_to_add = 'foo.txt'
         path_to_add = dut.target / file_to_add
         path_to_add.write_text('Hello, world!', 'utf-8')
-        path_to_add.chmod(0o644)
+        path_to_add.chmod(0o760)
 
-        Args = namedtuple('Args', 'files')
         args = Args(files=[file_to_add])
         r = dut.add(args)
         self.assertEquals(0, r)
@@ -104,7 +102,7 @@ class TestHamstercage(TestCase):
                      '    entries:\n'
                      '      foo.txt:\n'
                      '        group: staff\n'
-                     '        mode: 0o644\n'
+                     '        mode: 0o760\n'
                      '        owner: stb\n'
                      '        type: file\n'), m)
 
@@ -119,7 +117,6 @@ class TestHamstercage(TestCase):
         path_to_add = dut.target / link_to_add
         path_to_add.symlink_to('/dev/null')
 
-        Args = namedtuple('Args', 'files')
         args = Args(files=[link_to_add])
         r = dut.add(args)
         self.assertEquals(0, r)
@@ -141,41 +138,45 @@ class TestHamstercage(TestCase):
         self.assertFalse((dut.repo / 'tags' / 'all' / link_to_add).exists())
 
 
-    def test_apply(self):
+    def test_add_many(self):
         dut = self.prepare_hamstercage()
 
-        dir_to_add = 'a-dir'
-        dir_path = dut.target / dir_to_add
-        dir_path.mkdir()
+        self.dir_to_add = 'a-dir'
+        self.dir_path = dut.target / self.dir_to_add
+        self.dir_path.mkdir()
 
-        file_to_add = 'foo.txt'
-        file_path = dut.target / file_to_add
-        file_path.write_text('Hello, world!', 'utf-8')
-        file_path.chmod(0o644)
+        self.file_to_add = 'foo.txt'
+        self.file_path = dut.target / self.file_to_add
+        self.file_path.write_text('Hello, world!', 'utf-8')
+        self.file_path.chmod(0o750)
 
-        link_to_add = 'a-link'
-        link_path = dut.target / link_to_add
-        link_path.symlink_to('/dev/null')
+        self.link_to_add = 'a-link'
+        self.link_path = dut.target / self.link_to_add
+        self.link_path.symlink_to('/dev/null')
 
-        Args = namedtuple('Args', 'files')
-        args = Args(files=[dir_to_add, file_to_add, link_to_add])
+        args = Args(files=[self.dir_to_add, self.file_to_add, self.link_to_add])
         r = dut.add(args)
         self.assertEquals(0, r)
+
+        return dut
+
+    def test_apply(self):
+        dut = self.test_add_many()
 
         dut.target = Path(self.tmpdir) / 'apply'
         args = Args(files=[])
         r = dut.apply(args)
         self.assertEquals(0, r)
-        self.assert_path_equal(dir_path, dut.target / dir_to_add)
-        self.assert_path_equal(file_path, dut.target / file_to_add)
-        self.assert_path_equal(link_path, dut.target / link_to_add)
+        self.assert_path_equal(self.dir_path, dut.target / self.dir_to_add)
+        self.assert_path_equal(self.file_path, dut.target / self.file_to_add)
+        self.assert_path_equal(self.link_path, dut.target / self.link_to_add)
 
         # again to make sure it's idempotent
         r = dut.apply(args)
         self.assertEquals(0, r)
-        self.assert_path_equal(dir_path, dut.target / dir_to_add)
-        self.assert_path_equal(file_path, dut.target / file_to_add)
-        self.assert_path_equal(link_path, dut.target / link_to_add)
+        self.assert_path_equal(self.dir_path, dut.target / self.dir_to_add)
+        self.assert_path_equal(self.file_path, dut.target / self.file_to_add)
+        self.assert_path_equal(self.link_path, dut.target / self.link_to_add)
 
         return dut
 
@@ -195,7 +196,6 @@ class TestHamstercage(TestCase):
         link_path.rename(dut.target / 'foo.txt')
         (dut.target / 'temp').rename(dut.target / 'a-link')
 
-        Args = namedtuple('Args', 'files')
         args = Args(files=[])
         with self.assertRaises(HamstercageException):
             r = dut.apply(args)
@@ -216,21 +216,84 @@ class TestHamstercage(TestCase):
                      '    entries: {}\n'), m)
 
 
+    def test_remove_file(self):
+        dut = self.prepare_hamstercage()
+
+        file_to_add = 'foo.txt'
+        path_to_add = dut.target / file_to_add
+        path_to_add.write_text('Hello, world!', 'utf-8')
+        path_to_add.chmod(0o760)
+
+        args = Args(files=[file_to_add])
+        r = dut.add(args)
+        self.assertEquals(0, r)
+
+        m = dut.manifest_file.read_text('utf-8')
+        self.assertEquals(('hosts:\n'
+                           '  testing.example.com:\n'
+                           "    description: ''\n"
+                           '    tags:\n'
+                           '    - all\n'
+                           'tags:\n'
+                           '  all:\n'
+                           '    description: files that apply to all hosts\n'
+                           '    entries:\n'
+                           '      foo.txt:\n'
+                           '        group: staff\n'
+                           '        mode: 0o760\n'
+                           '        owner: stb\n'
+                           '        type: file\n'), m)
+
+        f = (dut.repo / 'tags' / 'all' / file_to_add).read_text('utf-8')
+        self.assertEquals('Hello, world!', f)
+
+        r = dut.remove(args)
+        self.assertEquals(0, r)
+        self.assertFalse((dut.repo / 'tags' / 'all' / file_to_add).exists())
+
+
+    def test_save(self):
+        dut = self.test_add_many()
+
+        dir_to_add = 'a-dir'
+        dir_path = dut.target / dir_to_add
+        file_to_add = 'foo.txt'
+        file_path = dut.target / file_to_add
+        link_to_add = 'a-link'
+        link_path = dut.target / link_to_add
+
+        dir_path.chmod(0o700)
+        file_path.write_text('Foo bar', 'utf-8')
+        link_path.unlink()
+        link_path.symlink_to('/dev/zero')
+
+        r = dut.save(Args(files=[], force=0))
+        self.assertEquals(0, r)
+
+        entry = dut.manifest.tags['all'].entries[dir_to_add]
+        self.assertEquals(0o700, entry.mode)
+        entry = dut.manifest.tags['all'].entries[file_to_add]
+        self.assertEquals('Foo bar', dut._path_repo_absolute('all', entry).read_text())
+        entry = dut.manifest.tags['all'].entries[link_to_add]
+        self.assertEquals('/dev/zero', entry.target)
+
+
     def assert_path_equal(self, expected_path: Path, actual_path: Path):
-        with self.subTest():
-            self.assertTrue(actual_path.exists())
-        with self.subTest():
-            self.assertEquals(expected_path.is_dir(), actual_path.is_dir())
-        with self.subTest():
-            self.assertEquals(expected_path.is_file(), actual_path.is_file())
-        with self.subTest():
-            self.assertEquals(expected_path.is_symlink(), actual_path.is_symlink())
+        self.assertTrue(actual_path.exists())
+        self.assertEquals(expected_path.is_dir(), actual_path.is_dir())
+        self.assertEquals(expected_path.is_file(), actual_path.is_file())
+        self.assertEquals(expected_path.is_symlink(), actual_path.is_symlink())
         expected_stat = expected_path.stat()
         actual_stat = actual_path.stat()
-        with self.subTest():
-            self.assertEquals(expected_stat.st_gid, actual_stat.st_gid)
-        with self.subTest():
-            self.assertEquals(expected_stat.st_uid, actual_stat.st_uid)
-        with self.subTest():
-            self.assertEquals(expected_stat.st_mode, actual_stat.st_mode)
+        self.assertEquals(expected_stat.st_gid, actual_stat.st_gid)
+        self.assertEquals(expected_stat.st_uid, actual_stat.st_uid)
+        self.assertEquals(expected_stat.st_mode, actual_stat.st_mode)
 
+
+class Args:
+    files = []
+    force = 0
+
+    def __init__(self, files=[], force=0):
+        self.files = files
+        self.force = force
