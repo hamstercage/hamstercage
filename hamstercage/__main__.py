@@ -116,14 +116,10 @@ class Hamstercage:
         """
         self._load_manifest()
         for t in self.tags:
-            for p, e in self.manifest.entries.items():
+            for p, e in self.manifest.tags[t].entries.items():
                 if not self._files_match(e):
                     continue
-                target = self._path_target(e)
-                repo = self._path_repo_absolute(t, e)
-                shutil.copy2(repo, target, follow_symlinks=False)
-                os.chmod(target, e.mode, follow_symlinks=False)
-                shutil.chown(target, e.owner, e.group)
+                e.apply(self._path_repo_absolute(t, e), self._path_target(e))
         return 0
 
     def diff(self, args):

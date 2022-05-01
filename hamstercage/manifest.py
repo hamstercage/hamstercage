@@ -1,4 +1,6 @@
+import os
 import shutil
+from abc import ABC
 from pathlib import Path
 from typing import List
 
@@ -15,7 +17,7 @@ class FileMode(int):
     pass
 
 
-class Entry:
+class Entry(ABC):
     mode: int
     group: str
     owner: str
@@ -60,10 +62,14 @@ class Entry:
 
         t = e.get('type', 'file')
         match t:
+            case 'dir':
+                return DirEntry.from_dict(path, e)
             case 'file':
                 return FileEntry.from_dict(path, e)
+            case 'link':
+                return SymlinkEntry.from_dict(path, e)
             case _:
-                raise Exception(f'Unknown entry type "{e["type"]}')
+                raise HamstercageException(f'Unknown entry type "{e["type"]}"')
 
     def has_repo(self):
         """
@@ -71,6 +77,15 @@ class Entry:
         :return:
         """
         return False
+
+    def apply(self, repo: Path, target: Path):
+        """
+        Apply the entry to the target dir.
+        :param repo: Repo base dir
+        :param target: Target base dir
+        :return:
+        """
+        raise HamstercageException(f'class {self} does not implement apply()')
 
 
 class DirEntry(Entry):
@@ -102,6 +117,12 @@ class DirEntry(Entry):
             'owner': self.owner,
             'group': self.group,
         }
+
+    def apply(self, repo: Path, target: Path):
+        if target.exists() and not target.is_dir():
+            raise HamstercageException(f'Unable to update "{target}" because it exists and is not a directory')
+        target.mkdir(self.mode, exist_ok=True, parents=True)
+        shutil.chown(str(target), self.owner, self.group)
 
     def __str__(self):
         return f'SymlinkEntry<form={self.form}, path={self.path}, target={self.target}>'
@@ -146,6 +167,14 @@ class FileEntry(Entry):
         """
         return True
 
+    def apply(self, repo: Path, target: Path):
+        if target.exists() and not target.is_file():
+            raise HamstercageException(f'Unable to update "{target}" because it exists and is not a file')
+        target.parent.mkdir(exist_ok=True, parents=True)
+        shutil.copy2(str(repo), str(target))
+        os.chmod(str(target), self.mode, follow_symlinks=False)
+        shutil.chown(str(target), self.owner, self.group)
+
     def __str__(self):
         return f'FileEntry<form={self.form}, path={self.path}, mode={self.mode:#o}' \
                + ', owner={self.owner}, group={self.group}>'
@@ -181,6 +210,14 @@ class SymlinkEntry(Entry):
             'type': 'link',
             'target': self.target,
         }
+
+    def apply(self, repo: Path, target: Path):
+        if target.exists() and not target.is_symlink():
+            raise HamstercageException(f'Unable to update "{target}" because it exists and is not a symbolic link')
+        target.parent.mkdir(exist_ok=True, parents=True)
+        if target.exists():
+            target.unlink()
+        target.symlink_to(self.target)
 
     def __str__(self):
         return f'SymlinkEntry<form={self.form}, path={self.path}, target={self.target}>'
