@@ -1,0 +1,7 @@
+
+[project]
+name = "hamstercage"
+version = "0.0.1"
+dependencies = [
+    "pyyaml",
+]

@@ -1,0 +1,14 @@
+hosts:
+  testing.example.com:
+    description: ''
+    tags:
+    - all
+tags:
+  all:
+    description: files that apply to all hosts
+    entries:
+      foo.txt:
+        group: staff
+        mode: 0o644
+        owner: stb
+        type: file
