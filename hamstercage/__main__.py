@@ -176,17 +176,22 @@ class Hamstercage:
         has_diff = False
         self.files = args.files
 
-        for (target, repo) in self._tags_for_targets().items():
-            if target.exists() and repo.exists():
-                diff = list(self._diff(target, repo))
-                sys.stdout.writelines(diff)
-                if diff:
-                    has_diff = True
-            else:
-                if self._mtime_or_missing(repo, "---"):
-                    has_diff = True
-                if self._mtime_or_missing(target, "+++"):
-                    has_diff = True
+        for t in self.tags:
+            for p, e in self.manifest.tags[t].entries.items():
+                if not self._files_match(e):
+                    continue
+                repo = self._path_repo_absolute(t, e)
+                target = self._path_target(e)
+                if target.exists() and repo.exists():
+                    diff = list(self._diff(target, repo))
+                    sys.stdout.writelines(diff)
+                    if diff:
+                        has_diff = True
+                else:
+                    if self._mtime_or_missing(repo, "---"):
+                        has_diff = True
+                    if self._mtime_or_missing(target, "+++"):
+                        has_diff = True
         return 1 if has_diff else 0
 
     def init(self, args) -> int:
