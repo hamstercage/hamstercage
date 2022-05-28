@@ -182,6 +182,8 @@ class Hamstercage:
                     continue
                 repo = self._path_repo_absolute(t, e)
                 target = self._path_target(e)
+                if not repo.is_file():
+                    continue  # non-files don't have a file under tags
                 if target.exists() and repo.exists():
                     diff = list(self._diff(target, repo))
                     sys.stdout.writelines(diff)

@@ -209,21 +209,15 @@ class TestHamstercage(TestCase):
         with self.assertRaises(HamstercageException):
             r = dut.apply(args)
 
-    def test_diff(self):
-        dut = self.prepare_hamstercage()
-
-        self.file_to_add = "foo.txt"
-        self.file_path = dut.target / self.file_to_add
-        self.file_path.write_text("Hello, world!", "utf-8")
-        self.file_path.chmod(0o750)
-
-        args = Args(files=[self.file_to_add])
-        r = dut.add(args)
-        self.assertEqual(0, r)
+    def test_diff_unchanged(self):
+        dut = self.test_add_many()
 
         args = Args(files=[])
         r = dut.diff(args)
         self.assertEqual(0, r)
+
+    def test_diff_changed(self):
+        dut = self.test_add_many()
 
         self.file_path.write_text("Goodbye, world!", "utf-8")
 
