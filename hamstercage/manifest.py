@@ -70,15 +70,14 @@ class Entry(ABC):
             )
 
         t = e.get("type", "file")
-        match t:
-            case "dir":
-                return DirEntry.from_dict(path, e)
-            case "file":
-                return FileEntry.from_dict(path, e)
-            case "link":
-                return SymlinkEntry.from_dict(path, e)
-            case _:
-                raise HamstercageException(f'Unknown entry type "{e["type"]}"')
+        if t == "dir":
+            return DirEntry.from_dict(path, e)
+        elif t == "file":
+            return FileEntry.from_dict(path, e)
+        elif t == "link":
+            return SymlinkEntry.from_dict(path, e)
+        else:
+            raise HamstercageException(f'Unknown entry type "{e["type"]}"')
 
     def has_repo(self):
         """
@@ -273,7 +272,7 @@ class Tag:
     """
 
     description: str = ""
-    entries: dict[str, Entry]
+    entries: {}
     name: str
 
     def __init__(self, name: str) -> None:
@@ -304,10 +303,10 @@ class Manifest:
     dir_mode: int
     file_mode: int
     group: int
-    hosts: dict[str, Host]
+    hosts: dict
     manifest_file: str
     owner: int
-    tags: dict[str, Tag]
+    tags: dict
 
     def __init__(self, file: str) -> None:
         self.manifest_file = file

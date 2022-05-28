@@ -17,10 +17,10 @@ from hamstercage.utils import chmod
 class Hamstercage:
     target: Path
     manifest_file: Path
-    files: list[str]
+    files: list
     hostname: str
     repo: Path
-    tags: list[str]
+    tags: list
 
     def __init__(self):
         self.target = Path("/")
@@ -320,12 +320,12 @@ class Hamstercage:
                 return True
         return False
 
-    def _tags_for_targets(self) -> dict[Path, str]:
+    def _tags_for_targets(self) -> dict:
         """
         Builds a list of files that should be processed. Resolved duplicate entries consistently.
         :return:
         """
-        files: dict[Path, str] = {}
+        files: dict = {}
         for t in self.tags:
             for path, entry in self.manifest.tags[t].entries.items():
                 if not self._files_match(entry):

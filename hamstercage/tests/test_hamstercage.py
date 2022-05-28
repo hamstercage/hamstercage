@@ -1,7 +1,7 @@
 import grp
 import os
 import sys
-from importlib.resources import files
+from importlib_resources import files
 from pathlib import Path
 from pwd import getpwuid
 from unittest import TestCase
