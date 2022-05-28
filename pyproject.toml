@@ -44,7 +44,7 @@ hamstercage = "hamstercage:__main__.main"
 authors = ["Stefan Bethke <stb@lassitu.de>"]
 description = "Pets not cattle. A straightforward way to manage configuration files."
 name = "hamstercage"
-version = "0.0.0"
+version = "0.0.2"
 
 [tool.poetry.dependencies]
 python = "^3.7"
