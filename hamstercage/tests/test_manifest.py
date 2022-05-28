@@ -9,5 +9,5 @@ def test_FileEntry_from_dict():
     })
     assert dut.path == 'foo'
     assert dut.group == 'wheel'
-    assert dut.mode == 0o644
+    assert dut.mode == 0o755
     assert dut.owner == 'root'

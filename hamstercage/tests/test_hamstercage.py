@@ -44,7 +44,7 @@ class TestHamstercage(TestCase):
 
         self.assertIn('all', dut.manifest.tags)
         tag = dut.manifest.tags['all']
-        self.assertEquals(tag.description, 'Files that apply to all hosts')
+        self.assertEqual(tag.description, 'Files that apply to all hosts')
         self.assertIn('one.txt', tag.entries)
 
 
@@ -57,10 +57,10 @@ class TestHamstercage(TestCase):
 
         args = Args(files=[dir_to_add])
         r = dut.add(args)
-        self.assertEquals(0, r)
+        self.assertEqual(0, r)
 
         m = dut.manifest_file.read_text('utf-8')
-        self.assertEquals(('hosts:\n'
+        self.assertEqual(('hosts:\n'
                      '  testing.example.com:\n'
                      "    description: ''\n"
                      '    tags:\n'
@@ -88,10 +88,10 @@ class TestHamstercage(TestCase):
 
         args = Args(files=[file_to_add])
         r = dut.add(args)
-        self.assertEquals(0, r)
+        self.assertEqual(0, r)
 
         m = dut.manifest_file.read_text('utf-8')
-        self.assertEquals(('hosts:\n'
+        self.assertEqual(('hosts:\n'
                      '  testing.example.com:\n'
                      "    description: ''\n"
                      '    tags:\n'
@@ -107,7 +107,7 @@ class TestHamstercage(TestCase):
                      '        type: file\n'), m)
 
         f = (dut.repo / 'tags' / 'all' / file_to_add).read_text('utf-8')
-        self.assertEquals('Hello, world!', f)
+        self.assertEqual('Hello, world!', f)
 
 
     def test_add_link(self):
@@ -119,10 +119,10 @@ class TestHamstercage(TestCase):
 
         args = Args(files=[link_to_add])
         r = dut.add(args)
-        self.assertEquals(0, r)
+        self.assertEqual(0, r)
 
         m = dut.manifest_file.read_text('utf-8')
-        self.assertEquals(('hosts:\n'
+        self.assertEqual(('hosts:\n'
                      '  testing.example.com:\n'
                      "    description: ''\n"
                      '    tags:\n'
@@ -156,7 +156,7 @@ class TestHamstercage(TestCase):
 
         args = Args(files=[self.dir_to_add, self.file_to_add, self.link_to_add])
         r = dut.add(args)
-        self.assertEquals(0, r)
+        self.assertEqual(0, r)
 
         return dut
 
@@ -166,14 +166,14 @@ class TestHamstercage(TestCase):
         dut.target = Path(self.tmpdir) / 'apply'
         args = Args(files=[])
         r = dut.apply(args)
-        self.assertEquals(0, r)
+        self.assertEqual(0, r)
         self.assert_path_equal(self.dir_path, dut.target / self.dir_to_add)
         self.assert_path_equal(self.file_path, dut.target / self.file_to_add)
         self.assert_path_equal(self.link_path, dut.target / self.link_to_add)
 
         # again to make sure it's idempotent
         r = dut.apply(args)
-        self.assertEquals(0, r)
+        self.assertEqual(0, r)
         self.assert_path_equal(self.dir_path, dut.target / self.dir_to_add)
         self.assert_path_equal(self.file_path, dut.target / self.file_to_add)
         self.assert_path_equal(self.link_path, dut.target / self.link_to_add)
@@ -205,7 +205,7 @@ class TestHamstercage(TestCase):
         dut = self.prepare_hamstercage()
 
         m = dut.manifest_file.read_text('utf-8')
-        self.assertEquals(('hosts:\n'
+        self.assertEqual(('hosts:\n'
                      '  testing.example.com:\n'
                      "    description: ''\n"
                      '    tags:\n'
@@ -226,10 +226,10 @@ class TestHamstercage(TestCase):
 
         args = Args(files=[file_to_add])
         r = dut.add(args)
-        self.assertEquals(0, r)
+        self.assertEqual(0, r)
 
         m = dut.manifest_file.read_text('utf-8')
-        self.assertEquals(('hosts:\n'
+        self.assertEqual(('hosts:\n'
                            '  testing.example.com:\n'
                            "    description: ''\n"
                            '    tags:\n'
@@ -245,10 +245,10 @@ class TestHamstercage(TestCase):
                            '        type: file\n'), m)
 
         f = (dut.repo / 'tags' / 'all' / file_to_add).read_text('utf-8')
-        self.assertEquals('Hello, world!', f)
+        self.assertEqual('Hello, world!', f)
 
         r = dut.remove(args)
-        self.assertEquals(0, r)
+        self.assertEqual(0, r)
         self.assertFalse((dut.repo / 'tags' / 'all' / file_to_add).exists())
 
 
@@ -268,26 +268,26 @@ class TestHamstercage(TestCase):
         link_path.symlink_to('/dev/zero')
 
         r = dut.save(Args(files=[], force=0))
-        self.assertEquals(0, r)
+        self.assertEqual(0, r)
 
         entry = dut.manifest.tags['all'].entries[dir_to_add]
-        self.assertEquals(0o700, entry.mode)
+        self.assertEqual(0o700, entry.mode)
         entry = dut.manifest.tags['all'].entries[file_to_add]
-        self.assertEquals('Foo bar', dut._path_repo_absolute('all', entry).read_text())
+        self.assertEqual('Foo bar', dut._path_repo_absolute('all', entry).read_text())
         entry = dut.manifest.tags['all'].entries[link_to_add]
-        self.assertEquals('/dev/zero', entry.target)
+        self.assertEqual('/dev/zero', entry.target)
 
 
     def assert_path_equal(self, expected_path: Path, actual_path: Path):
         self.assertTrue(actual_path.exists())
-        self.assertEquals(expected_path.is_dir(), actual_path.is_dir())
-        self.assertEquals(expected_path.is_file(), actual_path.is_file())
-        self.assertEquals(expected_path.is_symlink(), actual_path.is_symlink())
+        self.assertEqual(expected_path.is_dir(), actual_path.is_dir())
+        self.assertEqual(expected_path.is_file(), actual_path.is_file())
+        self.assertEqual(expected_path.is_symlink(), actual_path.is_symlink())
         expected_stat = expected_path.stat()
         actual_stat = actual_path.stat()
-        self.assertEquals(expected_stat.st_gid, actual_stat.st_gid)
-        self.assertEquals(expected_stat.st_uid, actual_stat.st_uid)
-        self.assertEquals(expected_stat.st_mode, actual_stat.st_mode)
+        self.assertEqual(expected_stat.st_gid, actual_stat.st_gid)
+        self.assertEqual(expected_stat.st_uid, actual_stat.st_uid)
+        self.assertEqual(expected_stat.st_mode, actual_stat.st_mode)
 
 
 class Args:
