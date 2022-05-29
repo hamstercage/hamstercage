@@ -10,6 +10,7 @@ import pytest
 
 from hamstercage.__main__ import Hamstercage
 from hamstercage.hamstercage_exception import HamstercageException
+from hamstercage.manifest import Hook
 from hamstercage.utils import chmod
 
 
@@ -22,7 +23,7 @@ class TestHamstercage(TestCase):
 
     def prepare_hamstercage(self) -> Hamstercage:
         dut = Hamstercage()
-        dut.manifest_file = self.tmpdir / "manifest.yaml"
+        dut.manifest_file = self.tmpdir / "hamstercage.yaml"
         dut.hostname = "testing.example.com"
         dut.target = Path(self.tmpdir) / "target"
         dut.repo = Path(self.tmpdir) / "repo"
@@ -33,7 +34,7 @@ class TestHamstercage(TestCase):
 
     def test_load(self):
         dut = Hamstercage()
-        dut.manifest_file = files("hamstercage.tests") / "manifest.yaml"
+        dut.manifest_file = files("hamstercage.tests") / "hamstercage.yaml"
         dut.hostname = "testing.example.com"
         dut._load_manifest()
 
@@ -43,8 +44,8 @@ class TestHamstercage(TestCase):
 
         self.assertIn("all", dut.manifest.tags)
         tag = dut.manifest.tags["all"]
-        self.assertEqual(tag.description, "Files that apply to all hosts")
-        self.assertIn("one.txt", tag.entries)
+        self.assertEqual(tag.description, "files that apply to all hosts")
+        self.assertIn("foo.txt", tag.entries)
 
     def test_add_dir(self):
         dut = self.prepare_hamstercage()
@@ -62,7 +63,6 @@ class TestHamstercage(TestCase):
             (
                 "hosts:\n"
                 "  testing.example.com:\n"
-                "    description: ''\n"
                 "    tags:\n"
                 "    - all\n"
                 "tags:\n"
@@ -97,7 +97,6 @@ class TestHamstercage(TestCase):
             (
                 "hosts:\n"
                 "  testing.example.com:\n"
-                "    description: ''\n"
                 "    tags:\n"
                 "    - all\n"
                 "tags:\n"
@@ -132,7 +131,6 @@ class TestHamstercage(TestCase):
             (
                 "hosts:\n"
                 "  testing.example.com:\n"
-                "    description: ''\n"
                 "    tags:\n"
                 "    - all\n"
                 "tags:\n"
@@ -148,7 +146,7 @@ class TestHamstercage(TestCase):
 
         self.assertFalse((dut.repo / "tags" / "all" / link_to_add).exists())
 
-    def test_add_many(self):
+    def test_add_many(self) -> Hamstercage:
         dut = self.prepare_hamstercage()
 
         self.dir_to_add = "a-dir"
@@ -172,6 +170,12 @@ class TestHamstercage(TestCase):
 
     def test_apply(self):
         dut = self.test_add_many()
+        hook_status_file = self.tmpdir / "hook-ran"
+        hook = Hook.from_dict(
+            "post-apply",
+            {"command": f"echo foo >{hook_status_file}", "type": "shell"},
+        )
+        dut.manifest.tags["all"].hooks[hook.name] = hook
 
         dut.target = Path(self.tmpdir) / "apply"
         args = Args(files=[])
@@ -180,6 +184,7 @@ class TestHamstercage(TestCase):
         self.assert_path_equal(self.dir_path, dut.target / self.dir_to_add)
         self.assert_path_equal(self.file_path, dut.target / self.file_to_add)
         self.assert_path_equal(self.link_path, dut.target / self.link_to_add)
+        assert hook_status_file.exists()
 
         # again to make sure it's idempotent
         r = dut.apply(args)
@@ -233,13 +238,11 @@ class TestHamstercage(TestCase):
             (
                 "hosts:\n"
                 "  testing.example.com:\n"
-                "    description: ''\n"
                 "    tags:\n"
                 "    - all\n"
                 "tags:\n"
                 "  all:\n"
                 "    description: files that apply to all hosts\n"
-                "    entries: {}\n"
             ),
             m,
         )
@@ -261,7 +264,6 @@ class TestHamstercage(TestCase):
             (
                 "hosts:\n"
                 "  testing.example.com:\n"
-                "    description: ''\n"
                 "    tags:\n"
                 "    - all\n"
                 "tags:\n"
@@ -331,6 +333,8 @@ class Args:
     files = []
     force = 0
 
-    def __init__(self, files=[], force=0):
+    def __init__(self, files=None, force=0):
+        if files is None:
+            files = []
         self.files = files
         self.force = force

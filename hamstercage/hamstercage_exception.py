@@ -6,3 +6,4 @@ class HamstercageException(Exception):
     def __init__(self, msg, exit_code=1):
         super().__init__(msg)
         self.exit_code = exit_code
+        self.msg = msg

@@ -5,16 +5,21 @@ import sys
 from datetime import datetime
 from difflib import unified_diff
 from pathlib import Path
+from typing import Iterator
 
 from yaml.scanner import ScannerError
 
 from hamstercage import Manifest
 from hamstercage.hamstercage_exception import HamstercageException
-from hamstercage.manifest import FileEntry, Host, Tag, Entry
+from hamstercage.manifest import Host, Tag, Entry
 from hamstercage.utils import chmod
 
 
 class Hamstercage:
+    """
+    The main progam. Parses command line arguments and invokes sub-commands.
+    """
+
     target: Path
     manifest_file: Path
     files: list
@@ -23,12 +28,13 @@ class Hamstercage:
     tags: list
 
     def __init__(self):
-        self.target = Path("/")
-        self.manifest_file = Path("hamstercage.yaml")
         self.files = []
         self.hostname = socket.gethostname()
+        self.manifest = None
+        self.manifest_file = Path("hamstercage.yaml")
         self.repo = Path(".")
         self.tags = []
+        self.target = Path("/")
 
     def main(self):
         parser = argparse.ArgumentParser(
@@ -151,10 +157,12 @@ class Hamstercage:
                 f"Need to specify exactly one tag to add files to", 64
             )
 
+        self._run_hook(self.tags[0], "add", "pre")
         for file in args.files:
             entry = self._add_or_update(
                 file, self.tags[0], ignore_existing=args.force > 0
             )
+        self._run_hook(self.tags[0], "add", "post")
         self.manifest.dump()
         return 0
 
@@ -165,10 +173,12 @@ class Hamstercage:
         """
         self._load_manifest()
         for t in self.tags:
+            self._run_hook(t, "apply", "pre")
             for p, e in self.manifest.tags[t].entries.items():
                 if not self._files_match(e):
                     continue
                 e.apply(self._path_repo_absolute(t, e), self._path_target(e))
+            self._run_hook(t, "apply", "post")
         return 0
 
     def diff(self, args):
@@ -177,6 +187,7 @@ class Hamstercage:
         self.files = args.files
 
         for t in self.tags:
+            self._run_hook(t, "diff", "pre")
             for p, e in self.manifest.tags[t].entries.items():
                 if not self._files_match(e):
                     continue
@@ -194,6 +205,7 @@ class Hamstercage:
                         has_diff = True
                     if self._mtime_or_missing(target, "+++"):
                         has_diff = True
+            self._run_hook(t, "diff", "post")
         return 1 if has_diff else 0
 
     def init(self, args) -> int:
@@ -205,7 +217,7 @@ class Hamstercage:
             raise HamstercageException(
                 f'manifest file "{self.manifest_file}" already exists', 1
             )
-        manifest = Manifest(self.manifest_file)
+        manifest = Manifest(str(self.manifest_file))
         manifest.hosts[self.hostname] = Host(self.hostname)
         manifest.hosts[self.hostname].tags = ["all"]
         manifest.tags = {
@@ -272,7 +284,18 @@ class Hamstercage:
 
     def _add_or_update(
         self, path: str, tag: str, ignore_existing=False, require_existing=False
-    ):
+    ) -> Entry:
+        """
+        Add a new file to, or update its contents and attributes in the repo.
+
+        By default, it is an error if the repo file exists, and no error if the repo file doesn't exist.
+
+        :param path: the target path of the file to be added/updated
+        :param tag: the tag to update
+        :param ignore_existing: it is not an error if the file already exists in the repo (default False)
+        :param require_existing: it is an error if the file doesn't exist in the repo (default False)
+        :return: the updated entry
+        """
         if tag not in self.manifest.tags:
             raise HamstercageException(f"no tag {tag} in manifest")
         entries = self.manifest.tags[tag].entries
@@ -301,7 +324,14 @@ class Hamstercage:
         return entry
 
     @staticmethod
-    def _diff(target, repo):
+    def _diff(target, repo) -> Iterator[str]:
+        """
+        Generate a unified diff between the target and the repo file.
+
+        :param target: the target file path
+        :param repo: the repo file path
+        :return: An iterator of diff lines
+        """
         with open(target) as f:
             t = f.readlines()
         with open(repo) as f:
@@ -316,10 +346,22 @@ class Hamstercage:
         )
 
     @staticmethod
-    def _exists_status(path):
+    def _exists_status(path) -> str:
+        """
+        Return a string representing whether the path exists or not.
+        :param path: to check
+        :return: a space if the file exists, an exclamation sign otherwise
+        """
         return " " if path else "!"
 
-    def _files_match(self, entry: Entry):
+    def _files_match(self, entry: Entry) -> bool:
+        """
+        Return if the entry matches the files given on the command line. If the list of files is empty, any entry will
+        match.
+
+        :param entry: to check
+        :return: True if the list of files matches this entry
+        """
         if len(self.files) == 0:
             return True
         for f in self.files:
@@ -327,33 +369,13 @@ class Hamstercage:
                 return True
         return False
 
-    def _tags_for_targets(self) -> dict:
+    def _load_manifest(self) -> None:
         """
-        Builds a list of files that should be processed. Resolved duplicate entries consistently.
-        :return:
+        Load the manifest from the configured path. If the manifest had been loaded previously, do nothing.
+        :return: None
         """
-        files: dict = {}
-        for t in self.tags:
-            for path, entry in self.manifest.tags[t].entries.items():
-                if not self._files_match(entry):
-                    continue
-                if path in files:
-                    continue
-                files[path] = t
-        return files
-
-    @staticmethod
-    def _mtime(path):
-        return datetime.fromtimestamp(path.stat().st_mtime).isoformat()
-
-    def _mtime_or_missing(self, path, prefix):
-        if path.exists():
-            print(f"{prefix} {str(path)}\t{self._mtime(path)}")
-            return False
-        print(f"{prefix} {str(path)}\tmissing")
-        return True
-
-    def _load_manifest(self):
+        if self.manifest:
+            return
         try:
             self.manifest = Manifest(str(self.manifest_file))
             self.manifest.load()
@@ -374,20 +396,11 @@ class Hamstercage:
                 f'Unable to load manifest from "{self.manifest_file}": {e}', 71
             )
 
-    def _path_repo_absolute(self, tag: str, entry: Entry):
-        return self.repo.joinpath(self._path_repo_relative(tag, entry))
-
-    def _path_repo_relative(self, tag: str, entry: Entry):
-        return Path("tags") / tag / entry.path
-
-    def _path_target(self, entry: Entry):
-        return self.target.joinpath(entry.path)
-
     def _mkdir_repo(self, path: Path) -> None:
         """
         Create a directory in the repo, copying owner/group/mode from the manifest file
-        :param path:
-        :return:
+        :param path: of the new directory
+        :return: None
         """
         if str(path) != ".":
             self._mkdir_repo(path.parent)
@@ -396,6 +409,84 @@ class Hamstercage:
             p.mkdir(mode=self.manifest.dir_mode)
             chmod(str(p), self.manifest.dir_mode)
             shutil.chown(str(p), self.manifest.owner, self.manifest.group)
+
+    @staticmethod
+    def _mtime(path: Path) -> str:
+        """
+        Return the modification time of path as a string.
+        :param path: of file
+        :return: time and date in ISO8601 format
+        """
+        return datetime.fromtimestamp(path.stat().st_mtime).isoformat()
+
+    def _mtime_or_missing(self, path: Path, prefix: str):
+        """
+        Print the modification date of path, or "missing" if the file doesn't exist.
+        :param path: of the file
+        :param prefix: string prefix to print
+        :return:
+        """
+        if path.exists():
+            print(f"{prefix} {str(path)}\t{self._mtime(path)}")
+            return False
+        print(f"{prefix} {str(path)}\tmissing")
+        return True
+
+    def _path_repo_absolute(self, tag: str, entry: Entry) -> Path:
+        """
+        Return the absolute path for the file of the entry.
+        :param tag: the tag for this entry
+        :param entry: of the file
+        :return: path of file
+        """
+        return self.repo.joinpath(self._path_repo_relative(tag, entry))
+
+    def _path_repo_relative(self, tag: str, entry: Entry):
+        """
+        Return the relative path for the file of the entry.
+        :param tag: the tag for this entry
+        :param entry: of the file
+        :return: path of file
+        """
+        return Path("tags") / tag / entry.path
+
+    def _path_target(self, entry: Entry) -> Path:
+        """
+        Return the path to the target file for the entry.
+        :param entry: of the file
+        :return: path of file
+        """
+        return self.target.joinpath(entry.path)
+
+    def _run_hook(self, tagname: str, cmd: str, step: str):
+        """
+        Execute the defined hook (if any) for the given command and step. If the hook is defined, but cannot be
+        executed successfully, a HamstercageException is thrown.
+        :param tagname: where the hook is defined
+        :param cmd: command that is being executed
+        :param step: pre or post
+        :return: 0 if successful, any other exit code on failure.
+        """
+        tag = self.manifest.tags[tagname]
+        hook = tag.hooks.get(f"{step}-{cmd}", tag.hooks.get("*"))
+        if hook:
+            return hook.call(self.manifest, cmd, step, tag)
+        return 0
+
+    def _tags_for_targets(self) -> dict:
+        """
+        Builds a list of files that should be processed. Resolved duplicate entries consistently.
+        :return:
+        """
+        files: dict = {}
+        for t in self.tags:
+            for path, entry in self.manifest.tags[t].entries.items():
+                if not self._files_match(entry):
+                    continue
+                if path in files:
+                    continue
+                files[path] = t
+        return files
 
 
 def main():

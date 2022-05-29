@@ -1,5 +1,9 @@
 import os
 import shutil
+import subprocess
+import sys
+import textwrap
+import traceback
 from abc import ABC
 from pathlib import Path
 from typing import List
@@ -29,9 +33,9 @@ class Entry(ABC):
         self.path = path
         self.form = "normal"
         self.mode = 0o644
-        self.owner = 0
-        self.group = 0
-        self.target = None
+        self.owner = "root"
+        self.group = "root"
+        self.target = ""
 
     @staticmethod
     def entry(path: str, e):
@@ -244,26 +248,160 @@ class Host:
     Represents one host in the manifest.
     """
 
-    description: str = ""
+    description: str
     name: str
-    tags: List[str] = ()
+    tags: List[str]
 
     def __init__(self, n: str) -> None:
+        self.description = ""
         self.name = n
+        self.tags = []
         pass
 
     @staticmethod
     def from_dict(n: str, d: dict) -> "Host":
         host = Host(n)
-        host.description = d.get("description", "")
+        if "description" in d:
+            host.description = d.get("description", "")
+        if not "tags" in d:
+            raise HamstercageException(
+                f'Invalid host definition for "{n}": must have a list of tags'
+            )
         host.tags = d["tags"]
         return host
 
     def to_dict(self) -> dict:
-        return {
+        d = {"tags": self.tags}
+        if len(self.description) > 0:
+            d["description"] = self.description
+        return d
+
+
+class Hook:
+    """
+    Represents one hook in a tag.
+    """
+
+    command: str
+    description: str
+    name: str
+    type: str
+
+    valid_types = ["exec", "python", "shell"]
+
+    def __init__(self, name: str):
+        pass
+
+    @staticmethod
+    def from_dict(name: str, d: dict) -> "Hook":
+        hook = Hook(name)
+        if "command" not in d:
+            raise HamstercageException(
+                f'In definition of hook "{hook.name}": missing "command"'
+            )
+        hook.command = d["command"]
+        hook.description = d.get("description", "")
+        hook.name = name
+        hook.type = d["type"]
+        if hook.type not in Hook.valid_types:
+            raise HamstercageException(
+                f'In definition of hook "{hook.name}": Invalid hook type "{hook.type}", must be one of {", ".join(Hook.valid_types)}'
+            )
+        return hook
+
+    def to_dict(self) -> dict:
+        d = {
+            "command": self.command,
             "description": self.description,
-            "tags": self.tags,
+            "type": self.type,
         }
+        return d
+
+    def call(self, manifest: "Manifest", cmd: str, step: str, tag: "Tag") -> int:
+        if self.type == "exec":
+            return self._call_shell(
+                [str(self._get_path(manifest)), cmd, step, self.name],
+                manifest,
+                cmd,
+                step,
+                tag,
+                shell=False,
+            )
+        elif self.type == "python":
+            return self._call_python(manifest, cmd, step, tag)
+        elif self.type == "shell":
+            return self._call_shell(
+                [self.command], manifest, cmd, step, tag, shell=True
+            )
+        else:
+            raise HamstercageException(
+                f'In definition of hook "{self.name}": Invalid hook type "{self.type}", must be one of {", ".join(Hook.valid_types)}'
+            )
+
+    def _call_python(self, manifest: "Manifest", cmd: str, step: str, tag: "Tag"):
+        path = self._get_path(manifest)
+        globals = {
+            "cmd": cmd,
+            "manifest": manifest,
+            "hook": self.name,
+            "step": step,
+            "tag": tag,
+            "__file__": str(path),
+            "__name__": "__hamstercage__",
+        }
+        script = path.read_text("utf-8")
+        try:
+            exec(script, globals)
+            return 0
+        except SyntaxError as e:
+            lines = script.split("\n")
+            raise HamstercageException(
+                f'Error executing hook "{self.name}" Python command "{self.command}" line {e.lineno}::\n\t{lines[e.lineno-1]}'
+            )
+        except Exception as e:
+            _, _, tb = sys.exc_info()
+            tb_info = traceback.extract_tb(tb)
+            filename, line, func, text = tb_info[-1]
+            lines = script.split("\n")
+            print(
+                textwrap.dedent(
+                    f"""
+                            Error executing hook "{self.name}" Python command "{self.command}" line {line}: {e.__class__.__name__}{e.args}
+                            \t{lines[line-1]}
+                            """
+                ),
+                file=sys.stderr,
+            )
+            return 1
+
+    def _call_shell(
+        self,
+        args: [],
+        manifest: "Manifest",
+        cmd: str,
+        step: str,
+        tag: "Tag",
+        shell: bool,
+    ):
+        env = dict(os.environ)
+        env["HAMSTERCAGE_CMD"] = cmd
+        env["HAMSTERCAGE_MANIFEST"] = manifest.manifest_file
+        env["HAMSTERCAGE_HOOK"] = self.name
+        env["HAMSTERCAGE_STEP"] = step
+        env["HAMSTERCAGE_TAG"] = tag.name
+        r = subprocess.call(args, env=env, shell=shell)
+        if r != 0:
+            raise HamstercageException(
+                f'Error executing hook "{self.name}" "{" ".join(args)}": command exited with {r}',
+                r,
+            )
+        return 0
+
+    def _get_path(self, manifest: "Manifest"):
+        path = Path(self.command)
+        if not path.is_absolute():
+            path = Path(manifest.manifest_file).parent / path
+        return path
 
 
 class Tag:
@@ -271,28 +409,44 @@ class Tag:
     Represents a tag definition in the manifest.
     """
 
-    description: str = ""
+    description: str
     entries: {}
+    hooks: {}
     name: str
 
     def __init__(self, name: str) -> None:
         self.name = name
         self.description = ""
         self.entries = {}
+        self.hooks = {}
 
     @staticmethod
     def from_dict(name: str, d: dict) -> "Tag":
         tag = Tag(name)
-        tag.description = d["description"]
-        for p, e in d["entries"].items():
-            entry = Entry.entry(p, e)
-            tag.entries[p] = entry
+        if "description" in d:
+            tag.description = d["description"]
+        if "entries" in d:
+            for p, e in d["entries"].items():
+                entry = Entry.entry(p, e)
+                tag.entries[p] = entry
+        if "hooks" in d:
+            for p, e in d["hooks"].items():
+                entry = Hook.from_dict(p, e)
+                tag.hooks[p] = entry
         return tag
 
     def to_dict(self) -> dict:
-        d = {"description": self.description, "entries": {}}
-        for (path, entry) in self.entries.items():
-            d["entries"][path] = entry.to_dict()
+        d = {}
+        if len(self.description) > 0:
+            d["description"] = self.description
+        if len(self.entries) > 0:
+            d["entries"] = {}
+            for (path, entry) in self.entries.items():
+                d["entries"][path] = entry.to_dict()
+        if len(self.hooks) > 0:
+            d["hooks"] = {}
+            for (path, entry) in self.hooks.items():
+                d["hooks"][path] = entry.to_dict()
         return d
 
     def __str__(self):
