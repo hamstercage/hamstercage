@@ -121,20 +121,21 @@ class TestHamstercage(unittest.TestCase):
         assert "all" in dut.tags
         assert "*" in dut.tags["all"].hooks
 
-        verbose = ""
-        verbose = "env | sort\n" + 'echo "args: $@"\n'
-
         script.write_text(
-            "#!/bin/sh\n"
-            + verbose
-            + 'test "$1" == "apply"\n'
-            + 'test "$2" == "post"\n'
-            + 'test "$3" == "*"\n'
-            + 'test "$HAMSTERCAGE_CMD" == "apply"\n'
-            + 'test "$HAMSTERCAGE_HOOK" == "*"\n'
-            + f'test "HAMSTERCAGE_MANIFEST" == "{script}"\n'
-            + 'test "$HAMSTERCAGE_STEP" == "post"\n'
-            + 'test "$HAMSTERCAGE_TAG" == "all"\n',
+            textwrap.dedent(
+                f"""\
+                #!/bin/sh
+                set -e
+                test "$1" = "apply"
+                test "$2" = "post"
+                test "$3" = "*"
+                test "$HAMSTERCAGE_CMD" = "apply"
+                test "$HAMSTERCAGE_HOOK" = "*"
+                test "$HAMSTERCAGE_MANIFEST" = "{dut.manifest_file}"
+                test "$HAMSTERCAGE_STEP" = "post"
+                test "$HAMSTERCAGE_TAG" = "all"
+                """
+            ),
             "utf-8",
         )
         os.chmod(script, 0o755)
