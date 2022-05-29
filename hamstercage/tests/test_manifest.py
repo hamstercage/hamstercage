@@ -10,7 +10,7 @@ import yaml
 
 from ..__main__ import Hamstercage
 from ..hamstercage_exception import HamstercageException
-from ..manifest import FileEntry, Manifest
+from ..manifest import FileEntry, Manifest, Tag
 
 
 class TestHamstercage(unittest.TestCase):
@@ -128,10 +128,11 @@ class TestHamstercage(unittest.TestCase):
                 set -e
                 test "$1" = "apply"
                 test "$2" = "post"
-                test "$3" = "*"
+                test "$3" = "all"
                 test "$HAMSTERCAGE_CMD" = "apply"
                 test "$HAMSTERCAGE_HOOK" = "*"
                 test "$HAMSTERCAGE_MANIFEST" = "{dut.manifest_file}"
+                test "$HAMSTERCAGE_REPO" = "{str(Path(dut.manifest_file).parent)}"
                 test "$HAMSTERCAGE_STEP" = "post"
                 test "$HAMSTERCAGE_TAG" = "all"
                 """
@@ -177,10 +178,11 @@ class TestHamstercage(unittest.TestCase):
                 assert cmd == "apply"
                 assert manifest is not None
                 assert hook == "*"
+                assert repo == "{self.tmpdir}"
                 assert step == "post"
                 assert tag.name == "all"
-                print(f"\\n__file__={{__file__}}")
-                print(f"__name__={{__name__}}")
+                print(__file__)
+                assert __name__ == "__hamstercage__"
                 """
             )
         )
@@ -243,3 +245,63 @@ class TestHamstercage(unittest.TestCase):
         h = dut.tags["all"].hooks["*"]
         r = h.call(dut, "apply", "post", dut.tags["all"])
         assert r == 0
+
+    def test_tag_find_hook_with_star(self):
+        dut = Tag.from_dict(
+            "all",
+            {
+                "hooks": {
+                    "pre-add": {
+                        "command": "pre-add",
+                        "type": "shell",
+                    },
+                    "*-apply": {
+                        "command": "star-apply",
+                        "type": "shell",
+                    },
+                    "post-*": {
+                        "command": "post-star",
+                        "type": "shell",
+                    },
+                    "*": {
+                        "command": "star",
+                        "type": "shell",
+                    },
+                }
+            },
+        )
+
+        h = dut.find_hook("add", "pre")
+        assert h is not None and h.command == "pre-add"
+        h = dut.find_hook("apply", "pre")
+        assert h is not None and h.command == "star-apply"
+        h = dut.find_hook("add", "post")
+        assert h is not None and h.command == "post-star"
+        h = dut.find_hook("list", "pre")
+        assert h is not None and h.command == "star"
+
+    def test_tag_find_hook_no_star(self):
+        dut = Tag.from_dict(
+            "all",
+            {
+                "hooks": {
+                    "pre-add": {
+                        "command": "pre-add",
+                        "type": "shell",
+                    },
+                    "post-apply": {
+                        "command": "post-apply",
+                        "type": "shell",
+                    },
+                }
+            },
+        )
+
+        h = dut.find_hook("add", "pre")
+        assert h is not None and h.command == "pre-add"
+        h = dut.find_hook("apply", "post")
+        assert h is not None and h.command == "post-apply"
+        h = dut.find_hook("add", "post")
+        assert h is None
+        h = dut.find_hook("list", "pre")
+        assert h is None

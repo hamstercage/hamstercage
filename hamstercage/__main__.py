@@ -468,7 +468,7 @@ class Hamstercage:
         :return: 0 if successful, any other exit code on failure.
         """
         tag = self.manifest.tags[tagname]
-        hook = tag.hooks.get(f"{step}-{cmd}", tag.hooks.get("*"))
+        hook = tag.find_hook(cmd, step)
         if hook:
             return hook.call(self.manifest, cmd, step, tag)
         return 0

@@ -320,7 +320,7 @@ class Hook:
     def call(self, manifest: "Manifest", cmd: str, step: str, tag: "Tag") -> int:
         if self.type == "exec":
             return self._call_shell(
-                [str(self._get_path(manifest)), cmd, step, self.name],
+                [str(self._get_path(manifest)), cmd, step, tag.name],
                 manifest,
                 cmd,
                 step,
@@ -344,6 +344,7 @@ class Hook:
             "cmd": cmd,
             "manifest": manifest,
             "hook": self.name,
+            "repo": str(Path(manifest.manifest_file).parent),
             "step": step,
             "tag": tag,
             "__file__": str(path),
@@ -356,7 +357,7 @@ class Hook:
         except SyntaxError as e:
             lines = script.split("\n")
             raise HamstercageException(
-                f'Error executing hook "{self.name}" Python command "{self.command}" line {e.lineno}::\n\t{lines[e.lineno-1]}'
+                f'Error executing hook "{self.name}" Python command "{self.command}" line {e.lineno}::\n\t{lines[e.lineno - 1]}'
             )
         except Exception as e:
             _, _, tb = sys.exc_info()
@@ -367,7 +368,7 @@ class Hook:
                 textwrap.dedent(
                     f"""
                             Error executing hook "{self.name}" Python command "{self.command}" line {line}: {e.__class__.__name__}{e.args}
-                            \t{lines[line-1]}
+                            \t{lines[line - 1]}
                             """
                 ),
                 file=sys.stderr,
@@ -387,6 +388,7 @@ class Hook:
         env["HAMSTERCAGE_CMD"] = cmd
         env["HAMSTERCAGE_MANIFEST"] = manifest.manifest_file
         env["HAMSTERCAGE_HOOK"] = self.name
+        env["HAMSTERCAGE_REPO"] = str(Path(manifest.manifest_file).parent)
         env["HAMSTERCAGE_STEP"] = step
         env["HAMSTERCAGE_TAG"] = tag.name
         r = subprocess.call(args, env=env, shell=shell)
@@ -449,6 +451,20 @@ class Tag:
                 d["hooks"][path] = entry.to_dict()
         return d
 
+    def find_hook(self, command: str, step: str) -> Hook:
+        """
+        Find the best match hook for this command and step. If no such hook is defined, return None.
+        :param command:
+        :param step:
+        :return:
+        """
+        hook = None
+        for n in (f"{step}-{command}", f"*-{command}", f"{step}-*", "*"):
+            hook = self.hooks.get(n)
+            if hook:
+                break
+        return hook
+
     def __str__(self):
         return f"<Tag name={self.name} entries={len(self.entries)}>"
 
@@ -463,7 +479,7 @@ class Manifest:
     tags: dict
 
     def __init__(self, file: str) -> None:
-        self.manifest_file = file
+        self.manifest_file = str(file)
         self.hosts = {}
         self.tags = {}
 
