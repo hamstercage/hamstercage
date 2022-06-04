@@ -37,7 +37,9 @@ class Hamstercage:
         self.tags = []
         self.target = Path("/")
 
-    def main(self):
+    def main(self, args=None):
+        if args is None:
+            args = sys.argv
         parser = argparse.ArgumentParser(
             prog="hamstercage", description="Manage the hamster cage."
         )
@@ -146,7 +148,7 @@ class Hamstercage:
             help="manage tags in the manifest",
         )
         subparser.set_defaults(func=self.tag_add)
-        subparser.add_argument("name", nargs="1", help="tag name")
+        subparser.add_argument("name", nargs=1, help="tag name")
         subparser.add_argument(
             "-d",
             "--description",
@@ -155,7 +157,7 @@ class Hamstercage:
             help="description for this tag",
         )
 
-        args = parser.parse_args()
+        args = parser.parse_args(args)
 
         if args.func:
             self.target = args.directory

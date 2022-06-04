@@ -361,6 +361,10 @@ class TestHamstercage(TestCase):
             out.getvalue().split("\n"),
         )
 
+    def test_main(self):
+        dut = self.prepare_hamstercage()
+        dut.main([])
+
     def test_normalize_path(self):
         dut = self.prepare_hamstercage()
 
