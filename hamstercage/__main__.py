@@ -404,13 +404,17 @@ class Hamstercage:
         entries[path] = entry
         if entry.has_repo():
             repo = self._path_repo_absolute(self.tags[0], entry)
+            if repo.exists():
+                raise HamstercageException(
+                    f"Unable to add {repo} to tag {tag}: a file already exists at this location"
+                )
             try:
                 self._mkdir_repo(self._path_repo_relative(self.tags[0], entry).parent)
                 shutil.copy2(entry.target, repo, follow_symlinks=False)
                 shutil.chown(repo, self.manifest.owner, self.manifest.group)
                 repo.chmod(self.manifest.file_mode)
             except FileNotFoundError as e:
-                raise HamstercageException(f"Unable to add {path}to tag {tag}: {e}", e)
+                raise HamstercageException(f"Unable to add {repo} to tag {tag}: {e}", e)
         return entry
 
     @staticmethod
