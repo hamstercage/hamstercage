@@ -404,9 +404,9 @@ class Hamstercage:
         entries[path] = entry
         if entry.has_repo():
             repo = self._path_repo_absolute(self.tags[0], entry)
-            if repo.exists():
+            if repo.exists() and not repo.is_file():
                 raise HamstercageException(
-                    f"Unable to add {repo} to tag {tag}: a file already exists at this location"
+                    f"Unable to add {repo} to tag {tag}: another directory entry already exists here"
                 )
             try:
                 self._mkdir_repo(self._path_repo_relative(self.tags[0], entry).parent)
