@@ -361,6 +361,15 @@ class TestHamstercage(TestCase):
             out.getvalue().split("\n"),
         )
 
+    def test_list_long_missing(self):
+        dut = self.test_add_many()
+        out = io.StringIO()
+        self.file_path.unlink()
+
+        args = Args(files=[str(self.file_path)], long=1)
+        r = dut.list(args, file=out)
+        self.assertEqual(0, r)
+
     def test_main(self):
         dut = self.prepare_hamstercage()
         dut.main([])

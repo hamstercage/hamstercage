@@ -430,6 +430,13 @@ class Hamstercage:
         :param repo: the repo file path
         :return: An iterator of diff lines
         """
+        if not target.exists() or not repo.exists():
+            r = []
+            if not target.exists():
+                r.append(f"! {target} not found")
+            if not repo.exists():
+                r.append(f"! {repo} not found")
+            return r
         with open(target) as f:
             t = f.readlines()
         with open(repo) as f:
