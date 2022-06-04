@@ -1,4 +1,5 @@
 import argparse
+import os
 import shutil
 import socket
 import sys
@@ -11,8 +12,8 @@ from yaml.scanner import ScannerError
 
 from hamstercage import Manifest
 from hamstercage.hamstercage_exception import HamstercageException
-from hamstercage.manifest import Host, Tag, Entry
-from hamstercage.utils import chmod
+from hamstercage.manifest import Host, Tag, Entry, DirEntry, SymlinkEntry, FileEntry
+from hamstercage.utils import chmod, mode_to_str, short_date, print_table, ListEntry
 
 
 class Hamstercage:
@@ -106,6 +107,13 @@ class Hamstercage:
         subparser.set_defaults(func=self.list)
         subparser.add_argument(
             "-l", "--long", action="count", default=0, help="list format long"
+        )
+        subparser.add_argument(
+            "-t",
+            "--tabs",
+            action="count",
+            default=0,
+            help="separate columns with tabs instead of spaces",
         )
         subparser.add_argument(
             "files", nargs="*", help="limit results to these file patterns"
@@ -228,18 +236,77 @@ class Hamstercage:
         manifest.dump()
         return 0
 
-    def list(self, args):
+    def list(self, args, file=None):
         """
         Print a list of all manifest entries
         :return:
         """
+        if file is None:
+            out = sys.stdout
         self._load_manifest()
         self.files = args.files
-        for (target, repo) in self._tags_for_targets().items():
-            if args.long > 0:
-                print(f"{target} -> {repo}")
-            else:
-                print(f"{target}")
+        items = {}
+        for t in self.tags:
+            for p, e in self.manifest.tags[t].entries.items():
+                if not self._files_match(e):
+                    continue
+                repo = self._path_repo_absolute(t, e)
+                target = self._path_target(e)
+                if target not in items:
+                    items[target] = ListEntry(e, repo, t)
+        if args.long == 0:
+            for path in sorted(items):
+                print(path, file=file)
+        else:
+            lines = []
+            for path in sorted(items):
+                item = items[path]
+                entry = item.entry
+                name = str(path)
+                stat = path.stat()
+                status = " "
+                if not path.exists():
+                    status = "!"
+                type = "-"
+                size = "0"
+                if isinstance(entry, FileEntry):
+                    if list(self._diff(path, item.repo)):
+                        status = "*"
+                    size = str(stat.st_size)
+                if isinstance(entry, DirEntry):
+                    name = name + "/"
+                    type = "d"
+                if isinstance(entry, SymlinkEntry):
+                    name = name + " -> " + entry.target
+                    type = "l"
+                    if os.readlink(path) != entry.target:
+                        status = "*"
+                lines.append(
+                    [
+                        status,
+                        mode_to_str(type, entry.mode),
+                        entry.owner,
+                        entry.group,
+                        size,
+                        short_date(int(stat.st_mtime)),
+                        item.tag,
+                        name,
+                    ]
+                )
+            print_table(lines, align=["<", "<", "<", "<", ">"], file=file)
+        # widths = [0] * 8
+        # align = ["<", "<", "<", "<", ">", "<", "<", "<"]
+        # for line in lines:
+        #     for i in range(0, len(line)):
+        #         widths[i] = max(widths[i], len(line[i]))
+        # fs = []
+        # for i in range(0, len(widths) - 1):
+        #     fs.append(f"{{{i}:{align[i]}{widths[i]}}}")
+        #     # f = f + f"{{0:{widths[i]}.{widths[i]}s}}"
+        # fs.append(f"{{{len(widths)-1}}}")
+        # for line in lines:
+        #     # print("{0:} {1:}".format(*line), file=out)
+        #     print(" ".join(fs).format(*line), file=out)
         return 0
 
     def remove(self, args):

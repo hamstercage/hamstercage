@@ -1,12 +1,15 @@
 import grp
+import io
 import os
 import sys
-from importlib_resources import files
+import time
+from datetime import datetime
 from pathlib import Path
 from pwd import getpwuid
 from unittest import TestCase
 
 import pytest
+from importlib_resources import files
 
 from hamstercage.__main__ import Hamstercage
 from hamstercage.hamstercage_exception import HamstercageException
@@ -20,6 +23,7 @@ class TestHamstercage(TestCase):
         self.tmpdir = tmpdir
         self.user = getpwuid(os.stat(self.tmpdir).st_uid).pw_name
         self.group = grp.getgrgid(os.stat(self.tmpdir).st_gid).gr_name
+        self.now = time.time()
 
     def prepare_hamstercage(self) -> Hamstercage:
         dut = Hamstercage()
@@ -53,6 +57,7 @@ class TestHamstercage(TestCase):
         dir_to_add = "a-dir"
         path_to_add = dut.target / dir_to_add
         path_to_add.mkdir()
+        os.utime(path_to_add, (self.now, self.now))
 
         args = Args(files=[dir_to_add])
         r = dut.add(args)
@@ -87,6 +92,7 @@ class TestHamstercage(TestCase):
         path_to_add = dut.target / file_to_add
         path_to_add.write_text("Hello, world!", "utf-8")
         path_to_add.chmod(0o760)
+        os.utime(path_to_add, (self.now, self.now))
 
         args = Args(files=[file_to_add])
         r = dut.add(args)
@@ -121,6 +127,7 @@ class TestHamstercage(TestCase):
         link_to_add = "a-link"
         path_to_add = dut.target / link_to_add
         path_to_add.symlink_to("/dev/null")
+        os.utime(path_to_add, (self.now, self.now), follow_symlinks=False)
 
         args = Args(files=[link_to_add])
         r = dut.add(args)
@@ -152,15 +159,18 @@ class TestHamstercage(TestCase):
         self.dir_to_add = "a-dir"
         self.dir_path = dut.target / self.dir_to_add
         self.dir_path.mkdir()
+        os.utime(self.dir_path, (self.now, self.now))
 
         self.file_to_add = "foo.txt"
         self.file_path = dut.target / self.file_to_add
         self.file_path.write_text("Hello, world!", "utf-8")
         self.file_path.chmod(0o750)
+        os.utime(self.file_path, (self.now, self.now))
 
         self.link_to_add = "a-link"
         self.link_path = dut.target / self.link_to_add
         self.link_path.symlink_to("/dev/null")
+        os.utime(self.link_path, (self.now, self.now), follow_symlinks=False)
 
         args = Args(files=[self.dir_to_add, self.file_to_add, self.link_to_add])
         r = dut.add(args)
@@ -245,6 +255,44 @@ class TestHamstercage(TestCase):
                 "    description: files that apply to all hosts\n"
             ),
             m,
+        )
+
+    def test_list_short(self):
+        dut = self.test_add_many()
+        out = io.StringIO()
+
+        args = Args(files=[], long=0)
+        r = dut.list(args, file=out)
+        self.assertEqual(0, r)
+
+        t = datetime.fromtimestamp(os.stat(self.file_path).st_mtime).strftime("%H:%M")
+        self.assertEqual(
+            [
+                str(self.dir_path),
+                str(self.link_path),
+                str(self.file_path),
+                "",
+            ],
+            out.getvalue().split("\n"),
+        )
+
+    def test_list_long(self):
+        dut = self.test_add_many()
+        out = io.StringIO()
+
+        args = Args(files=[], long=1)
+        r = dut.list(args, file=out)
+        self.assertEqual(0, r)
+
+        t = datetime.fromtimestamp(os.stat(self.file_path).st_mtime).strftime("%H:%M")
+        self.assertEqual(
+            [
+                f" \tdrwxr-xr-x\t{self.user}\t{self.group}\t0\t{t}\tall\t{self.dir_path}/",
+                f" \tlrw-r--r--\troot\troot\t0\t{t}\tall\t{self.link_path} -> /dev/null",
+                f" \t-rwxr-x---\t{self.user}\t{self.group}\t13\t{t}\tall\t{self.file_path}",
+                "",
+            ],
+            out.getvalue().split("\n"),
         )
 
     def test_remove_file(self):
@@ -333,8 +381,9 @@ class Args:
     files = []
     force = 0
 
-    def __init__(self, files=None, force=0):
+    def __init__(self, files=None, force=0, long=0):
         if files is None:
             files = []
         self.files = files
         self.force = force
+        self.long = long
