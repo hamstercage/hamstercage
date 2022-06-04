@@ -277,17 +277,21 @@ class Hamstercage:
             for path in sorted(items):
                 item = items[path]
                 entry = item.entry
+                mtime = "?"
                 name = str(path)
-                stat = path.stat()
-                status = " "
-                if not path.exists():
-                    status = "!"
-                type = "-"
                 size = "0"
+                status = " "
+                type = "-"
+                if path.exists():
+                    stat = path.stat()
+                    mtime = short_date(int(stat.st_mtime))
+                    if path.is_file():
+                        size = str(stat.st_size)
+                else:
+                    status = "!"
                 if isinstance(entry, FileEntry):
                     if list(self._diff(path, item.repo)):
                         status = "*"
-                    size = str(stat.st_size)
                 if isinstance(entry, DirEntry):
                     name = name + "/"
                     type = "d"
@@ -303,7 +307,7 @@ class Hamstercage:
                         entry.owner,
                         entry.group,
                         size,
-                        short_date(int(stat.st_mtime)),
+                        mtime,
                         item.tag,
                         name,
                     ]
@@ -592,6 +596,8 @@ class Hamstercage:
         :param step: pre or post
         :return: 0 if successful, any other exit code on failure.
         """
+        if not tagname in self.manifest.tags:
+            raise HamstercageException(f"Unknown tag {tagname}")
         tag = self.manifest.tags[tagname]
         hook = tag.find_hook(cmd, step)
         if hook:
