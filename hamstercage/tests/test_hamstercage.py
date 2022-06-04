@@ -240,6 +240,14 @@ class TestHamstercage(TestCase):
         r = dut.diff(args)
         self.assertEqual(1, r)
 
+    def test_diff_missing(self):
+        dut = self.test_add_many()
+        self.file_path.unlink()
+
+        args = Args(files=[])
+        r = dut.diff(args)
+        self.assertEqual(1, r)
+
     def test_entries(self):
         dut = self.test_add_many()
 
