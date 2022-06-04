@@ -39,7 +39,7 @@ class Hamstercage:
 
     def main(self, args=None):
         if args is None:
-            args = sys.argv
+            args = sys.argv[1:]
         parser = argparse.ArgumentParser(
             prog="hamstercage", description="Manage the hamster cage."
         )
