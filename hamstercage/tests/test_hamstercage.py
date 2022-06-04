@@ -13,7 +13,7 @@ from importlib_resources import files
 
 from hamstercage.__main__ import Hamstercage
 from hamstercage.hamstercage_exception import HamstercageException
-from hamstercage.manifest import Hook, Tag
+from hamstercage.manifest import Hook
 from hamstercage.utils import chmod
 
 
@@ -253,8 +253,6 @@ class TestHamstercage(TestCase):
 
     def test_entries_duplicate(self):
         dut = self.prepare_hamstercage()
-        dut._load_manifest()
-        dut.manifest.tags["other"] = Tag("other")
 
         file_to_add = "foo.txt"
         path_to_add = dut.target / file_to_add
@@ -262,10 +260,15 @@ class TestHamstercage(TestCase):
         path_to_add.chmod(0o760)
         os.utime(path_to_add, (self.now, self.now))
 
+        args = Args(name="other")
+        r = dut.tag_add(args)
+        self.assertEqual(0, r)
+
         args = Args(files=[file_to_add])
         dut.tags = ["all"]
         r = dut.add(args)
         self.assertEqual(0, r)
+
         dut.tags = ["other"]
         r = dut.add(args)
         self.assertEqual(0, r)
@@ -428,6 +431,28 @@ class TestHamstercage(TestCase):
         entry = dut.manifest.tags["all"].entries[link_to_add]
         self.assertEqual("/dev/zero", entry.target)
 
+    def test_tag_add(self):
+        dut = self.prepare_hamstercage()
+        dut._load_manifest()
+
+        args = Args(name="other")
+        r = dut.tag_add(args)
+        self.assertEqual(0, r)
+
+        assert "other" in dut.manifest.tags
+        assert dut.manifest.tags["other"].description == ""
+
+        args = Args(name="other")
+        with self.assertRaises(HamstercageException):
+            dut.tag_add(args)
+
+        args = Args(name="foo", description="bar")
+        r = dut.tag_add(args)
+        self.assertEqual(0, r)
+
+        assert "foo" in dut.manifest.tags
+        assert dut.manifest.tags["foo"].description == "bar"
+
     def assert_path_equal(self, expected_path: Path, actual_path: Path):
         self.assertTrue(actual_path.exists())
         self.assertEqual(expected_path.is_dir(), actual_path.is_dir())
@@ -450,9 +475,11 @@ class Args:
     files = []
     force = 0
 
-    def __init__(self, files=None, force=0, long=0):
+    def __init__(self, description=None, files=None, force=0, long=0, name=None):
         if files is None:
             files = []
+        self.description = description
         self.files = files
         self.force = force
         self.long = long
+        self.name = name

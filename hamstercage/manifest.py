@@ -416,9 +416,11 @@ class Tag:
     hooks: {}
     name: str
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, description=None) -> None:
         self.name = name
         self.description = ""
+        if description is not None:
+            self.description = description
         self.entries = {}
         self.hooks = {}
 

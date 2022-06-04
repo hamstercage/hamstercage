@@ -224,6 +224,14 @@ hamstercage save [file...]
 
 Updates the manifest entries and repository files from the target.
 
+#### Adding Tags `tag add`
+
+Adds a new tag to the manifest.
+
+```shell
+hamstercage tag add [-d description] [file...]
+```
+
 # Developing Hamstercage
 
 ## Poetry For Dependency Management and Building

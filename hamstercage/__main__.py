@@ -133,6 +133,28 @@ class Hamstercage:
             "files", nargs="*", help="limit results to these file patterns"
         )
 
+        subparser = subparsers.add_parser(
+            "tag",
+            help="manage tags in the manifest",
+        )
+        subparser.set_defaults(func=None)
+
+        tagparsers = subparser.add_subparsers(help="tag command help")
+
+        subparser = tagparsers.add_parser(
+            "tag",
+            help="manage tags in the manifest",
+        )
+        subparser.set_defaults(func=self.tag_add)
+        subparser.add_argument("name", nargs="1", help="tag name")
+        subparser.add_argument(
+            "-d",
+            "--description",
+            type=str,
+            default="",
+            help="description for this tag",
+        )
+
         args = parser.parse_args()
 
         if args.func:
@@ -338,6 +360,14 @@ class Hamstercage:
         self._load_manifest()
         for (target, tag) in self._tags_for_targets().items():
             self._add_or_update(target, tag, require_existing=True)
+        return 0
+
+    def tag_add(self, args):
+        self._load_manifest()
+        if args.name in self.manifest.tags:
+            raise HamstercageException(f"A tag named f{args.name} already exists")
+        self.manifest.tags[args.name] = Tag(args.name, args.description)
+        self.manifest.dump()
         return 0
 
     def _add_or_update(
