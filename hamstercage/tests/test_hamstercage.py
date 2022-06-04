@@ -13,7 +13,7 @@ from importlib_resources import files
 
 from hamstercage.__main__ import Hamstercage
 from hamstercage.hamstercage_exception import HamstercageException
-from hamstercage.manifest import Hook
+from hamstercage.manifest import Hook, Tag
 from hamstercage.utils import chmod
 
 
@@ -240,6 +240,42 @@ class TestHamstercage(TestCase):
         r = dut.diff(args)
         self.assertEqual(1, r)
 
+    def test_entries(self):
+        dut = self.test_add_many()
+
+        entries = {}
+        for (t, e) in dut._entries():
+            entries[e.path] = (t, e)
+        assert len(entries) == 3
+        assert "foo.txt" in entries
+        assert "a-dir" in entries
+        assert "a-link" in entries
+
+    def test_entries_duplicate(self):
+        dut = self.prepare_hamstercage()
+        dut._load_manifest()
+        dut.manifest.tags["other"] = Tag("other")
+
+        file_to_add = "foo.txt"
+        path_to_add = dut.target / file_to_add
+        path_to_add.write_text("Hello, world!", "utf-8")
+        path_to_add.chmod(0o760)
+        os.utime(path_to_add, (self.now, self.now))
+
+        args = Args(files=[file_to_add])
+        dut.tags = ["all"]
+        r = dut.add(args)
+        self.assertEqual(0, r)
+        dut.tags = ["other"]
+        r = dut.add(args)
+        self.assertEqual(0, r)
+
+        entries = {}
+        for (t, e) in dut._entries():
+            entries[e.path] = (t, e)
+        assert len(entries) == 1
+        assert "foo.txt" in entries
+
     def test_init(self):
         dut = self.prepare_hamstercage()
 
@@ -302,6 +338,31 @@ class TestHamstercage(TestCase):
             ],
             out.getvalue().split("\n"),
         )
+
+    def test_list_long_one(self):
+        dut = self.test_add_many()
+        out = io.StringIO()
+
+        args = Args(files=[str(self.file_path)], long=1)
+        r = dut.list(args, file=out)
+        self.assertEqual(0, r)
+
+        ts_file = datetime.fromtimestamp(os.stat(self.file_path).st_mtime).strftime(
+            "%H:%M"
+        )
+        self.assertEqual(
+            [
+                f" \t-rwxr-x---\t{self.user}\t{self.group}\t13\t{ts_file}\tall\t{self.file_path}",
+                "",
+            ],
+            out.getvalue().split("\n"),
+        )
+
+    def test_normalize_path(self):
+        dut = self.prepare_hamstercage()
+
+        assert dut._normalize_path("/foo") == "foo"
+        assert dut._normalize_path(str(dut.target / "foo")) == "foo"
 
     def test_remove_file(self):
         dut = self.prepare_hamstercage()

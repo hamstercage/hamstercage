@@ -180,13 +180,10 @@ class Hamstercage:
         :return:
         """
         self._load_manifest()
-        for t in self.tags:
-            self._run_hook(t, "apply", "pre")
-            for p, e in self.manifest.tags[t].entries.items():
-                if not self._files_match(e):
-                    continue
-                e.apply(self._path_repo_absolute(t, e), self._path_target(e))
-            self._run_hook(t, "apply", "post")
+        self._run_hooks("apply", "pre")
+        for t, e in self._entries():
+            e.apply(self._path_repo_absolute(t, e), self._path_target(e))
+        self._run_hooks("apply", "post")
         return 0
 
     def diff(self, args):
@@ -194,26 +191,23 @@ class Hamstercage:
         has_diff = False
         self.files = args.files
 
-        for t in self.tags:
-            self._run_hook(t, "diff", "pre")
-            for p, e in self.manifest.tags[t].entries.items():
-                if not self._files_match(e):
-                    continue
-                repo = self._path_repo_absolute(t, e)
-                target = self._path_target(e)
-                if not repo.is_file():
-                    continue  # non-files don't have a file under tags
-                if target.exists() and repo.exists():
-                    diff = list(self._diff(target, repo))
-                    sys.stdout.writelines(diff)
-                    if diff:
-                        has_diff = True
-                else:
-                    if self._mtime_or_missing(repo, "---"):
-                        has_diff = True
-                    if self._mtime_or_missing(target, "+++"):
-                        has_diff = True
-            self._run_hook(t, "diff", "post")
+        self._run_hooks("diff", "pre")
+        for t, e in self._entries():
+            repo = self._path_repo_absolute(t, e)
+            target = self._path_target(e)
+            if not repo.is_file():
+                continue  # non-files don't have a file under tags
+            if target.exists() and repo.exists():
+                diff = list(self._diff(target, repo))
+                sys.stdout.writelines(diff)
+                if diff:
+                    has_diff = True
+            else:
+                if self._mtime_or_missing(repo, "---"):
+                    has_diff = True
+                if self._mtime_or_missing(target, "+++"):
+                    has_diff = True
+        self._run_hooks("diff", "post")
         return 1 if has_diff else 0
 
     def init(self, args) -> int:
@@ -246,14 +240,11 @@ class Hamstercage:
         self._load_manifest()
         self.files = args.files
         items = {}
-        for t in self.tags:
-            for p, e in self.manifest.tags[t].entries.items():
-                if not self._files_match(e):
-                    continue
-                repo = self._path_repo_absolute(t, e)
-                target = self._path_target(e)
-                if target not in items:
-                    items[target] = ListEntry(e, repo, t)
+        for t, e in self._entries():
+            repo = self._path_repo_absolute(t, e)
+            target = self._path_target(e)
+            if target not in items:
+                items[target] = ListEntry(e, repo, t)
         if args.long == 0:
             for path in sorted(items):
                 print(path, file=file)
@@ -412,6 +403,22 @@ class Hamstercage:
             tofiledate=Hamstercage._mtime(target),
         )
 
+    def _entries(self):
+        """
+        Generator that produces all entries, potentially filtered by the list of files given on the command line. Only
+        returns entries for the first match for a path.
+        :return:
+        """
+        paths = {}
+        for t in self.tags:
+            for p, e in self.manifest.tags[t].entries.items():
+                if not self._files_match(e):
+                    continue
+                if p in paths:
+                    continue
+                paths[p] = True
+                yield t, e
+
     @staticmethod
     def _exists_status(path) -> str:
         """
@@ -432,7 +439,7 @@ class Hamstercage:
         if len(self.files) == 0:
             return True
         for f in self.files:
-            if Path(entry.path).match(f):
+            if Path(entry.path).match(self._normalize_path(f)):
                 return True
         return False
 
@@ -499,6 +506,21 @@ class Hamstercage:
         print(f"{prefix} {str(path)}\tmissing")
         return True
 
+    def _normalize_path(self, path: str) -> str:
+        """
+        Returns the normalized path for the given path.
+        :param path:
+        :return:
+        """
+        path = str(path)
+        if path.startswith(str(self.target)):
+            path = path[len(str(self.target)) :]
+        if path.startswith("/"):
+            path = path[1:]
+        if path.endswith("/"):
+            path = path[0:-1]
+        return path
+
     def _path_repo_absolute(self, tag: str, entry: Entry) -> Path:
         """
         Return the absolute path for the file of the entry.
@@ -540,19 +562,30 @@ class Hamstercage:
             return hook.call(self.manifest, cmd, step, tag)
         return 0
 
+    def _run_hooks(self, cmd: str, step: str):
+        """
+        Execute the defined hook (if any) for the given command and step for all tags. If the hook is defined, but
+        cannot be executed successfully, a HamstercageException is thrown.
+        :param cmd: command that is being executed
+        :param step: pre or post
+        :return: 0 if successful, any other exit code on failure.
+        """
+        for t in self.tags:
+            r = self._run_hook(t, cmd, step)
+            if r != 0:
+                return r
+        return 0
+
     def _tags_for_targets(self) -> dict:
         """
         Builds a list of files that should be processed. Resolved duplicate entries consistently.
         :return:
         """
         files: dict = {}
-        for t in self.tags:
-            for path, entry in self.manifest.tags[t].entries.items():
-                if not self._files_match(entry):
-                    continue
-                if path in files:
-                    continue
-                files[path] = t
+        for t, entry in self._entries():
+            if entry.path in files:
+                continue
+            files[entry.path] = t
         return files
 
 
