@@ -284,12 +284,20 @@ class TestHamstercage(TestCase):
         r = dut.list(args, file=out)
         self.assertEqual(0, r)
 
-        t = datetime.fromtimestamp(os.stat(self.file_path).st_mtime).strftime("%H:%M")
+        ts_dir = datetime.fromtimestamp(os.stat(self.dir_path).st_mtime).strftime(
+            "%H:%M"
+        )
+        ts_file = datetime.fromtimestamp(os.stat(self.file_path).st_mtime).strftime(
+            "%H:%M"
+        )
+        ts_link = datetime.fromtimestamp(os.stat(self.link_path).st_mtime).strftime(
+            "%H:%M"
+        )
         self.assertEqual(
             [
-                f" \tdrwxr-xr-x\t{self.user}\t{self.group}\t0\t{t}\tall\t{self.dir_path}/",
-                f" \tlrw-r--r--\troot\troot\t0\t{t}\tall\t{self.link_path} -> /dev/null",
-                f" \t-rwxr-x---\t{self.user}\t{self.group}\t13\t{t}\tall\t{self.file_path}",
+                f" \tdrwxr-xr-x\t{self.user}\t{self.group}\t0\t{ts_dir}\tall\t{self.dir_path}/",
+                f" \tlrw-r--r--\troot\troot\t0\t{ts_link}\tall\t{self.link_path} -> /dev/null",
+                f" \t-rwxr-x---\t{self.user}\t{self.group}\t13\t{ts_file}\tall\t{self.file_path}",
                 "",
             ],
             out.getvalue().split("\n"),
