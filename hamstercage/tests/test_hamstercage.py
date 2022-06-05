@@ -224,11 +224,11 @@ class TestHamstercage(TestCase):
         self.assert_path_equal(self.link_path, dut.target / self.link_to_add)
         assert hook_status_file.exists()
 
-        dut.manifest.tags["all"].entries["foo.txt"].mode = 0o600
+        dut.manifest.tags["all"].entries["foo.txt"].mode = 0o444
 
         r = dut.apply(args)
         self.assertEqual(0, r)
-        self.assertEqual((dut.target / self.file_to_add).stat().st_mode & 0o7777, 0o600)
+        self.assertEqual((dut.target / self.file_to_add).stat().st_mode & 0o7777, 0o444)
 
         return dut
 
