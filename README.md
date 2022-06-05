@@ -33,6 +33,13 @@ git commit
 
 ## Developing Hamstercage
 
+### Installing Development Snapshots
+
+The GitHub workflow automatically builds a snapshot version on each push to the main branch. To work with these snapshots, install them from [Test PyPI](https://test.pypi.org/project/hamstercage/):
+```shell
+sudo pip install --upgrade --index-url https://test.pypi.org/simple/ hamstercage
+```
+
 ### Poetry For Dependency Management and Building
 
 The project uses [Poetry](https://python-poetry.org), which you should install locally. After installing Poetry, you can install all necessary dependencies:
