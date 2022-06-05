@@ -1,3 +1,5 @@
+import unittest
+
 import grp
 import io
 import os
@@ -205,6 +207,7 @@ class TestHamstercage(TestCase):
 
         return dut
 
+    @unittest.SkipTest  # Github runner does not allow mode changes
     def test_apply_mode_change(self):
         dut = self.test_add_many()
         hook_status_file = self.tmpdir / "hook-ran"
