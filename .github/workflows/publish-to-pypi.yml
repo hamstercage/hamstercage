@@ -49,6 +49,5 @@ jobs:
       run: |
         poetry publish
     - name: Publish to Test PyPI
-      if: github.ref == 'refs/heads/main'
       run: |
         poetry publish -r test-pypi
