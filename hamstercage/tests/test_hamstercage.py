@@ -164,7 +164,7 @@ class TestHamstercage(TestCase):
         self.file_to_add = "foo.txt"
         self.file_path = dut.target / self.file_to_add
         self.file_path.write_text("Hello, world!", "utf-8")
-        self.file_path.chmod(0o750)
+        self.file_path.chmod(0o640)
         os.utime(self.file_path, (self.now, self.now))
 
         self.link_to_add = "a-link"
@@ -220,15 +220,15 @@ class TestHamstercage(TestCase):
         self.assertEqual(0, r)
         self.assert_path_equal(self.dir_path, dut.target / self.dir_to_add)
         self.assert_path_equal(self.file_path, dut.target / self.file_to_add)
-        self.assertEqual((dut.target / self.file_to_add).stat().st_mode & 0o7777, 0o750)
+        self.assertEqual((dut.target / self.file_to_add).stat().st_mode & 0o7777, 0o640)
         self.assert_path_equal(self.link_path, dut.target / self.link_to_add)
         assert hook_status_file.exists()
 
-        dut.manifest.tags["all"].entries["foo.txt"].mode = 0o640
+        dut.manifest.tags["all"].entries["foo.txt"].mode = 0o600
 
         r = dut.apply(args)
         self.assertEqual(0, r)
-        self.assertEqual((dut.target / self.file_to_add).stat().st_mode & 0o7777, 0o640)
+        self.assertEqual((dut.target / self.file_to_add).stat().st_mode & 0o7777, 0o600)
 
         return dut
 
@@ -371,7 +371,7 @@ class TestHamstercage(TestCase):
             [
                 f" \tdrwxr-xr-x\t{self.user}\t{self.group}\t0\t{ts_dir}\tall\t{self.dir_path}/",
                 f" \tlrw-r--r--\troot\troot\t0\t{ts_link}\tall\t{self.link_path} -> /dev/null",
-                f" \t-rwxr-x---\t{self.user}\t{self.group}\t13\t{ts_file}\tall\t{self.file_path}",
+                f" \t-rw-r-----\t{self.user}\t{self.group}\t13\t{ts_file}\tall\t{self.file_path}",
                 "",
             ],
             out.getvalue().split("\n"),
@@ -390,7 +390,7 @@ class TestHamstercage(TestCase):
         )
         self.assertEqual(
             [
-                f" \t-rwxr-x---\t{self.user}\t{self.group}\t13\t{ts_file}\tall\t{self.file_path}",
+                f" \t-rw-r-----\t{self.user}\t{self.group}\t13\t{ts_file}\tall\t{self.file_path}",
                 "",
             ],
             out.getvalue().split("\n"),
