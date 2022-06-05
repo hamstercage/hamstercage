@@ -205,6 +205,33 @@ class TestHamstercage(TestCase):
 
         return dut
 
+    def test_apply_mode_change(self):
+        dut = self.test_add_many()
+        hook_status_file = self.tmpdir / "hook-ran"
+        hook = Hook.from_dict(
+            "post-apply",
+            {"command": f"echo foo >{hook_status_file}", "type": "shell"},
+        )
+        dut.manifest.tags["all"].hooks[hook.name] = hook
+
+        dut.target = Path(self.tmpdir) / "apply"
+        args = Args(files=[])
+        r = dut.apply(args)
+        self.assertEqual(0, r)
+        self.assert_path_equal(self.dir_path, dut.target / self.dir_to_add)
+        self.assert_path_equal(self.file_path, dut.target / self.file_to_add)
+        self.assertEqual((dut.target / self.file_to_add).stat().st_mode & 0o7777, 0o750)
+        self.assert_path_equal(self.link_path, dut.target / self.link_to_add)
+        assert hook_status_file.exists()
+
+        dut.manifest.tags["all"].entries["foo.txt"].mode = 0o640
+
+        r = dut.apply(args)
+        self.assertEqual(0, r)
+        self.assertEqual((dut.target / self.file_to_add).stat().st_mode & 0o7777, 0o640)
+
+        return dut
+
     def test_apply_target_exists(self):
         dut = self.test_apply()
 
