@@ -16,7 +16,7 @@ To allow one repository to be used for multiple targets, sets of files can be ma
 
 ## Installation and Usage
 
-See [Hamstercage Documentation](http://localhost:1313/documentation/) and the [Hamstercage Homepage](https://hamstercage.io/).
+See [Hamstercage Documentation](https://hamstercage.io/documentation/) and the [Hamstercage Homepage](https://hamstercage.io/).
 
 ## Quick Start
 
