@@ -38,7 +38,7 @@ jobs:
     - name: verify code formatting
       run: poetry run black . --check
     - name: run unit tests
-      run: poetry run pytest
+      run: RUNNING_ON_GITHUB=1 poetry run pytest
     - name: build package
       run: |
         poetry version $(git describe --tags | sed -Ee 's/([^-]*)-([^-]+)-.*/\1.\2/')

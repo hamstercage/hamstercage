@@ -1,22 +1,23 @@
-import unittest
-
-import grp
 import io
 import os
-import sys
-import time
+import unittest
 from datetime import datetime
 from pathlib import Path
-from pwd import getpwuid
 from unittest import TestCase
 
+import grp
 import pytest
+import sys
+import time
 from importlib_resources import files
+from pwd import getpwuid
 
 from hamstercage.__main__ import Hamstercage
 from hamstercage.hamstercage_exception import HamstercageException
 from hamstercage.manifest import Hook
 from hamstercage.utils import chmod
+
+RUNNING_ON_GITHUB = int(os.environ.get("RUNNING_ON_GITHUB", 0))
 
 
 class TestHamstercage(TestCase):
@@ -207,7 +208,9 @@ class TestHamstercage(TestCase):
 
         return dut
 
-    @unittest.SkipTest  # Github runner does not allow mode changes
+    @unittest.skipIf(
+        RUNNING_ON_GITHUB, "Github runner does not support mode bits on /tmp"
+    )
     def test_apply_mode_change(self):
         dut = self.test_add_many()
         hook_status_file = self.tmpdir / "hook-ran"
