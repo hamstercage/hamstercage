@@ -364,8 +364,10 @@ class Hamstercage:
         :return:
         """
         self._load_manifest()
+        self._run_hooks("save", "pre")
         for (target, tag) in self._tags_for_targets().items():
             self._add_or_update(target, tag, require_existing=True)
+        self._run_hooks("save", "post")
         return 0
 
     def tag_add(self, args):
