@@ -2,12 +2,12 @@ import argparse
 import os
 import shutil
 import socket
-import sys
 from datetime import datetime
 from difflib import unified_diff
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Union
 
+import sys
 from yaml.scanner import ScannerError
 
 from hamstercage import Manifest
@@ -395,19 +395,19 @@ class Hamstercage:
         if tag not in self.manifest.tags:
             raise HamstercageException(f"no tag {tag} in manifest")
         entries = self.manifest.tags[tag].entries
-        target_path = self.target / path
-        entry = Entry.entry(path, target_path)
+        (manifest_path, target_path) = self._normalize_target_path(path)
+        entry = Entry.entry(manifest_path, target_path)
         if require_existing:
             if entry.path not in entries:
                 raise HamstercageException(
-                    f"Unable to update {path}: no entry in manifest for tag {tag}"
+                    f"Unable to update {path}: no entry {manifest_path} in manifest for tag {tag}"
                 )
         elif not ignore_existing:
             if entry.path in entries:
                 raise HamstercageException(
                     f"Unable to add {path}: already added to tag {tag}"
                 )
-        entries[path] = entry
+        entries[manifest_path] = entry
         if entry.has_repo():
             repo = self._path_repo_absolute(self.tags[0], entry)
             if repo.exists() and not repo.is_file():
@@ -570,6 +570,27 @@ class Hamstercage:
             path = path[0:-1]
         return path
 
+    def _normalize_target_path(self, path: Union[str, Path]) -> (str, Path):
+        """
+        Returns two paths: the path as it should be entered into the manifest, and the filesystem path for the target
+        file.
+        :param path:
+        :return: list of manifest path (str), and filesystem path (Path)
+        """
+        ppath = Path(path)
+        path = str(path)
+        starget = str(self.target) + "/"
+        if path.startswith(starget):
+            # absolute path including target, strip target
+            return path[len(starget) - 1 :], ppath.absolute()
+        else:
+            if ppath.is_absolute():
+                # prepend target to path
+                return str(path), Path(str(self.target) + str(path))
+            else:
+                #
+                return "/" + str(path), Path(str(self.target) + "/" + str(path))
+
     def _path_repo_absolute(self, tag: str, entry: Entry) -> Path:
         """
         Return the absolute path for the file of the entry.
@@ -586,7 +607,7 @@ class Hamstercage:
         :param entry: of the file
         :return: path of file
         """
-        return Path("tags") / tag / entry.path
+        return entry.path_as_child_of(Path("tags") / tag)
 
     def _path_target(self, entry: Entry) -> Path:
         """
@@ -594,7 +615,7 @@ class Hamstercage:
         :param entry: of the file
         :return: path of file
         """
-        return self.target.joinpath(entry.path)
+        return entry.path_as_child_of(self.target)
 
     def _run_hook(self, tagname: str, cmd: str, step: str):
         """

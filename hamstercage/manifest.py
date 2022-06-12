@@ -99,6 +99,17 @@ class Entry(ABC):
         """
         raise HamstercageException(f"class {self} does not implement apply()")
 
+    def path_as_child_of(self, target_path: Path) -> Path:
+        """
+        Returns the entry path as a child of target_path.
+        :param target_path: the base path
+        :return: path
+        """
+        path = str(self.path)
+        if path.startswith("/"):
+            path = path[1:]
+        return target_path / path
+
 
 class DirEntry(Entry):
     def __init__(self, path):
@@ -500,7 +511,6 @@ class Manifest:
         self.dir_mode = (
             self.file_mode | (self.file_mode & 0o0444) >> 2
         )  # copy r bit to x bit
-        self.entries = {}
         self.hosts = {}
         self.tags = {}
         for name, tag in manifest["tags"].items():
@@ -531,8 +541,7 @@ class Manifest:
         Returns the normal form of a path
         :return:
         """
-        if path.startswith("/"):
-            path = path[1:]
+        path = str(path)
         if path.endswith("/"):
             path = path[0:-1]
         return path
