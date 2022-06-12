@@ -39,6 +39,10 @@ class TestHamstercage(TestCase):
             dut.target.mkdir()
         return dut
 
+    def _add_file(self, files: dict, name: str, target: Path):
+        files[name] = target / name
+        files[name].write_text(f"Test file {name}")
+
     def test_load(self):
         dut = Hamstercage()
         dut.manifest_file = files("hamstercage.tests") / "hamstercage.yaml"
@@ -62,7 +66,7 @@ class TestHamstercage(TestCase):
         path_to_add.mkdir()
         os.utime(path_to_add, (self.now, self.now))
 
-        args = Args(files=[dir_to_add])
+        args = Args(files=[dir_to_add], tag="all")
         r = dut.add(args)
         self.assertEqual(0, r)
 
@@ -97,7 +101,7 @@ class TestHamstercage(TestCase):
         path_to_add.chmod(0o760)
         os.utime(path_to_add, (self.now, self.now))
 
-        args = Args(files=[path_to_add])
+        args = Args(files=[path_to_add], tag="all")
         r = dut.add(args)
         self.assertEqual(0, r)
 
@@ -132,7 +136,7 @@ class TestHamstercage(TestCase):
         path_to_add.symlink_to("/dev/null")
         os.utime(path_to_add, (self.now, self.now), follow_symlinks=False)
 
-        args = Args(files=[link_to_add])
+        args = Args(files=[link_to_add], tag="all")
         r = dut.add(args)
         self.assertEqual(0, r)
 
@@ -175,7 +179,9 @@ class TestHamstercage(TestCase):
         self.link_path.symlink_to("/dev/null")
         os.utime(self.link_path, (self.now, self.now), follow_symlinks=False)
 
-        args = Args(files=[self.dir_to_add, self.file_to_add, self.link_to_add])
+        args = Args(
+            files=[self.dir_to_add, self.file_to_add, self.link_to_add], tag="all"
+        )
         r = dut.add(args)
         self.assertEqual(0, r)
 
@@ -294,6 +300,7 @@ class TestHamstercage(TestCase):
 
     def test_entries_duplicate(self):
         dut = self.prepare_hamstercage()
+        dut.tags = ["other", "all"]
 
         file_to_add = "foo.txt"
         path_to_add = dut.target / file_to_add
@@ -305,12 +312,11 @@ class TestHamstercage(TestCase):
         r = dut.tag_add(args)
         self.assertEqual(0, r)
 
-        args = Args(files=[file_to_add])
-        dut.tags = ["all"]
+        args = Args(files=[file_to_add], tag="all")
         r = dut.add(args)
         self.assertEqual(0, r)
 
-        dut.tags = ["other"]
+        args = Args(files=[file_to_add], tag="other")
         r = dut.add(args)
         self.assertEqual(0, r)
 
@@ -319,6 +325,7 @@ class TestHamstercage(TestCase):
             entries[e.path] = (t, e)
         assert len(entries) == 1
         assert "/foo.txt" in entries
+        assert entries["/foo.txt"][0] == "other"
 
     def test_init(self):
         dut = self.prepare_hamstercage()
@@ -415,12 +422,6 @@ class TestHamstercage(TestCase):
         dut = self.prepare_hamstercage()
         dut.main([])
 
-    def test_normalize_path(self):
-        dut = self.prepare_hamstercage()
-
-        assert dut._normalize_path("/foo") == "foo"
-        assert dut._normalize_path(str(dut.target / "foo")) == "foo"
-
     def test_normalize_target_path(self):
         dut = self.prepare_hamstercage()
 
@@ -439,7 +440,7 @@ class TestHamstercage(TestCase):
         path_to_add.write_text("Hello, world!", "utf-8")
         path_to_add.chmod(0o760)
 
-        args = Args(files=["/" + file_to_add])
+        args = Args(files=["/" + file_to_add], tag="all")
         r = dut.add(args)
         self.assertEqual(0, r)
 
@@ -472,6 +473,7 @@ class TestHamstercage(TestCase):
 
     def test_save(self):
         dut = self.test_add_many()
+        dut.tags = ["other", "all"]
         dut.manifest.dump()
 
         dir_to_add = "a-dir"
@@ -487,15 +489,53 @@ class TestHamstercage(TestCase):
         link_path.symlink_to("/dev/zero")
 
         dut = self.prepare_hamstercage(create=False)
-        r = dut.save(Args(files=[], force=0))
+        r = dut.save(Args(force=0))
         self.assertEqual(0, r)
 
         entry = dut.manifest.tags["all"].entries["/" + dir_to_add]
         self.assertEqual(0o700, entry.mode)
         entry = dut.manifest.tags["all"].entries["/" + file_to_add]
-        self.assertEqual("Foo bar", dut._path_repo_absolute("all", entry).read_text())
+        self.assertEqual("Foo bar", dut._path_repo_entry("all", entry).read_text())
         entry = dut.manifest.tags["all"].entries["/" + link_to_add]
         self.assertEqual("/dev/zero", entry.target)
+
+    def test_save_duplicate(self):
+        dut = self.prepare_hamstercage()
+
+        args = Args(name="other")
+        r = dut.tag_add(args)
+        self.assertEqual(0, r)
+
+        files = {}
+
+        self._add_file(files, "only_in_all.txt", dut.target)
+        self._add_file(files, "only_in_other.txt", dut.target)
+
+        args = Args(files=[files["only_in_all.txt"]], tag="all")
+        r = dut.add(args)
+        self.assertEqual(0, r)
+
+        args = Args(files=[files["only_in_other.txt"]], tag="other")
+        r = dut.add(args)
+        self.assertEqual(0, r)
+
+        assert "/only_in_all.txt" in dut.manifest.tags["all"].entries
+        assert (dut.repo / "tags" / "all" / "only_in_all.txt").exists()
+        assert not (dut.repo / "tags" / "all" / "only_in_other.txt").exists()
+        assert "/only_in_other.txt" in dut.manifest.tags["other"].entries
+        assert (dut.repo / "tags" / "other" / "only_in_other.txt").exists()
+        assert not (dut.repo / "tags" / "other" / "only_in_all.txt").exists()
+
+        args = Args()
+        r = dut.save(args)
+        self.assertEqual(0, r)
+
+        assert "/only_in_all.txt" in dut.manifest.tags["all"].entries
+        assert (dut.repo / "tags" / "all" / "only_in_all.txt").exists()
+        assert not (dut.repo / "tags" / "all" / "only_in_other.txt").exists()
+        assert "/only_in_other.txt" in dut.manifest.tags["other"].entries
+        assert (dut.repo / "tags" / "other" / "only_in_other.txt").exists()
+        assert not (dut.repo / "tags" / "other" / "only_in_all.txt").exists()
 
     def test_tag_add(self):
         dut = self.prepare_hamstercage()
@@ -550,7 +590,9 @@ class Args:
     files = []
     force = 0
 
-    def __init__(self, description=None, files=None, force=0, long=0, name=None):
+    def __init__(
+        self, description=None, files=None, force=0, long=0, name=None, tag=None
+    ):
         if files is None:
             files = []
         self.description = description
@@ -558,3 +600,4 @@ class Args:
         self.force = force
         self.long = long
         self.name = name
+        self.tag = tag

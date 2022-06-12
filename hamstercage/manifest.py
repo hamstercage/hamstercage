@@ -11,7 +11,7 @@ from typing import List
 import yaml
 
 from hamstercage.hamstercage_exception import HamstercageException
-from hamstercage.utils import chmod
+from hamstercage.utils import chmod, mkdir_with_owner_group_mode, path_as_child_of
 
 """
 Manifest of files to be managed.
@@ -99,16 +99,16 @@ class Entry(ABC):
         """
         raise HamstercageException(f"class {self} does not implement apply()")
 
+    def save(self, repo_path, target_path, manifest):
+        raise RuntimeError("Internal error: cannot call abstract base class method")
+
     def path_as_child_of(self, target_path: Path) -> Path:
         """
         Returns the entry path as a child of target_path.
         :param target_path: the base path
         :return: path
         """
-        path = str(self.path)
-        if path.startswith("/"):
-            path = path[1:]
-        return target_path / path
+        return path_as_child_of(self.path, target_path)
 
 
 class DirEntry(Entry):
@@ -148,6 +148,15 @@ class DirEntry(Entry):
             )
         target.mkdir(self.mode, exist_ok=True, parents=True)
         shutil.chown(str(target), self.owner, self.group)
+
+    def save(self, repo_path, target_path, manifest):
+        if target_path.exists() and not target_path.is_dir:
+            raise HamstercageException(
+                f'Unable to update "{target_path}" because it exists and is not a directory'
+            )
+        self.group = target_path.group()
+        self.mode = target_path.stat().st_mode & 0o7777
+        self.owner = target_path.owner()
 
     def __str__(self):
         return f"SymlinkEntry<form={self.form}, path={self.path}, target={self.target}>"
@@ -202,6 +211,26 @@ class FileEntry(Entry):
         chmod(str(target), self.mode)
         shutil.chown(str(target), self.owner, self.group)
 
+    def save(self, repo_path, target_path, manifest):
+        if repo_path.exists() and not repo_path.is_file():
+            raise HamstercageException(
+                f"Unable to add {repo_path}: another directory entry already exists here"
+            )
+        try:
+            self.group = target_path.group()
+            self.mode = target_path.stat().st_mode & 0o7777
+            self.owner = target_path.owner()
+            mkdir_with_owner_group_mode(
+                repo_path.parent, manifest.owner, manifest.group, manifest.dir_mode
+            )
+            shutil.copy2(target_path, repo_path, follow_symlinks=False)
+            shutil.chown(repo_path, manifest.owner, manifest.group)
+            repo_path.chmod(manifest.file_mode)
+        except FileNotFoundError as e:
+            raise HamstercageException(
+                f"Unable to save {repo_path} to tag {target_path}: {e}", e
+            )
+
     def __str__(self):
         return (
             f"FileEntry<form={self.form}, path={self.path}, mode={self.mode:#o}"
@@ -249,6 +278,13 @@ class SymlinkEntry(Entry):
         if target.exists():
             target.unlink()
         target.symlink_to(self.target)
+
+    def save(self, repo_path: Path, target_path: Path, manifest: "Manifest"):
+        if target_path.exists() and not target_path.is_symlink():
+            raise HamstercageException(
+                f'Unable to save "{target_path}" because it is not a symbolic link'
+            )
+        self.target = str(target_path.resolve())
 
     def __str__(self):
         return f"SymlinkEntry<form={self.form}, path={self.path}, target={self.target}>"
@@ -423,8 +459,6 @@ class Tag:
     """
 
     description: str
-    entries: {}
-    hooks: {}
     name: str
 
     def __init__(self, name: str, description=None) -> None:

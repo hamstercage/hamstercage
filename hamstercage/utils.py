@@ -1,5 +1,8 @@
 import os
+import shutil
 import stat
+from typing import Union
+
 import sys
 
 from datetime import datetime, timedelta
@@ -18,6 +21,24 @@ def chmod(path, mode):
         os.chmod(path, mode, follow_symlinks=False)
     else:
         pass
+
+
+def mkdir_with_owner_group_mode(path: Path, owner: str, group: str, mode: int):
+    """
+    Create the directory path, including all parents. The new directories will be owned and have the permissions
+    as specified.
+    :param path: path of directory to create
+    :param owner: owner of the new directory
+    :param group: group of the new directory
+    :param mode: permission bits of the new directory
+    :return: none
+    """
+    if not path.exists():
+        if path.parent is not None:
+            mkdir_with_owner_group_mode(path.parent, owner, group, mode)
+        path.mkdir(mode=mode)
+        chmod(str(path), mode)
+        shutil.chown(str(path), owner, group)
 
 
 def mode_to_str(type: str, mode: int) -> str:
@@ -43,6 +64,19 @@ def short_date(ts: int) -> str:
     elif delta < timedelta(days=365 / 2):
         f = "%d.%m."
     return dt.strftime(f)
+
+
+def path_as_child_of(path: Union[Path, str], target_path: Path) -> Path:
+    """
+    Returns the entry path as a child of target_path.
+    :param path: the child path
+    :param target_path: the base path
+    :return: path
+    """
+    path = str(path)
+    if path.startswith("/"):
+        path = path[1:]
+    return target_path / path
 
 
 def print_table(table: list, align=None, file=None, tabs=None) -> None:
@@ -74,7 +108,7 @@ def print_table(table: list, align=None, file=None, tabs=None) -> None:
         for i in range(0, len(widths) - 1):
             fs.append(f"{{{i}:{align[i]}{widths[i]}}}")
             # f = f + f"{{0:{widths[i]}.{widths[i]}s}}"
-        fs.append(f"{{{len(widths)-1}}}")
+        fs.append(f"{{{len(widths) - 1}}}")
         f = " ".join(fs)
     for line in table:
         # print("{0:} {1:}".format(*line), file=out)

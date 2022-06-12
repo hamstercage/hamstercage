@@ -13,7 +13,14 @@ from yaml.scanner import ScannerError
 from hamstercage import Manifest
 from hamstercage.hamstercage_exception import HamstercageException
 from hamstercage.manifest import Host, Tag, Entry, DirEntry, SymlinkEntry, FileEntry
-from hamstercage.utils import chmod, mode_to_str, short_date, print_table, ListEntry
+from hamstercage.utils import (
+    chmod,
+    mode_to_str,
+    short_date,
+    print_table,
+    ListEntry,
+    path_as_child_of,
+)
 
 
 class Hamstercage:
@@ -82,6 +89,7 @@ class Hamstercage:
             default=0,
             help="overwrite existing entries",
         )
+        subparser.add_argument("tag", help="tag to add files to")
         subparser.add_argument("files", nargs="+", help="files to add")
 
         subparser = subparsers.add_parser(
@@ -127,6 +135,7 @@ class Hamstercage:
             help="remove one or more files from the manifest",
         )
         subparser.set_defaults(func=self.remove)
+        subparser.add_argument("tag", help="tag to add files to")
         subparser.add_argument("files", nargs="+", help="files to remove")
 
         subparser = subparsers.add_parser("save", help="save target files to repo")
@@ -182,19 +191,14 @@ class Hamstercage:
         :return:
         """
         self._load_manifest()
-        if len(args.files) == 0:
+        if len(args.files) < 1:
             raise HamstercageException(f"Need at least one file to add", 64)
-        if len(self.tags) != 1:
-            raise HamstercageException(
-                f"Need to specify exactly one tag to add files to", 64
-            )
 
-        self._run_hook(self.tags[0], "add", "pre")
+        self._run_hook(args.tag, "add", "pre")
         for file in args.files:
-            entry = self._add_or_update(
-                file, self.tags[0], ignore_existing=args.force > 0
-            )
-        self._run_hook(self.tags[0], "add", "post")
+            entry = self._add_entry(args.tag, file, ignore_existing=args.force > 0)
+            self._save_entry(args.tag, entry)
+        self._run_hook(args.tag, "add", "post")
         self.manifest.dump()
         return 0
 
@@ -206,7 +210,7 @@ class Hamstercage:
         self._load_manifest()
         self._run_hooks("apply", "pre")
         for t, e in self._entries():
-            e.apply(self._path_repo_absolute(t, e), self._path_target(e))
+            e.apply(self._path_repo_entry(t, e), self._path_target(e))
         self._run_hooks("apply", "post")
         return 0
 
@@ -217,7 +221,7 @@ class Hamstercage:
 
         self._run_hooks("diff", "pre")
         for t, e in self._entries():
-            repo = self._path_repo_absolute(t, e)
+            repo = self._path_repo_entry(t, e)
             target = self._path_target(e)
             if not repo.is_file():
                 continue  # non-files don't have a file under tags
@@ -265,7 +269,7 @@ class Hamstercage:
         self.files = args.files
         items = {}
         for t, e in self._entries():
-            repo = self._path_repo_absolute(t, e)
+            repo = self._path_repo_entry(t, e)
             target = self._path_target(e)
             if target not in items:
                 items[target] = ListEntry(e, repo, t)
@@ -335,23 +339,19 @@ class Hamstercage:
         :return:
         """
         self._load_manifest()
-        if len(args.files) == 0:
+        if len(args.files) < 1:
             raise HamstercageException(f"Need at least one file to remove", 64)
-        if len(self.tags) != 1:
-            raise HamstercageException(
-                f"Need to specify exactly one tag to remove files from", 64
-            )
 
         for file in args.files:
-            if file in self.manifest.tags[self.tags[0]].entries:
-                repo = self._path_repo_absolute(
-                    self.tags[0], self.manifest.tags[self.tags[0]].entries[file]
+            if file in self.manifest.tags[args.tag].entries:
+                repo = self._path_repo_entry(
+                    args.tag, self.manifest.tags[args.tag].entries[file]
                 )
-                del self.manifest.tags[self.tags[0]].entries[file]
+                del self.manifest.tags[args.tag].entries[file]
                 repo.unlink()
             else:
                 print(
-                    f"Unable to remove {file}: no such entry in tag {self.tags[0]}",
+                    f"Unable to remove {file}: no such entry in tag {args.tag}",
                     file=sys.stderr,
                 )
                 return 71
@@ -365,8 +365,8 @@ class Hamstercage:
         """
         self._load_manifest()
         self._run_hooks("save", "pre")
-        for (target, tag) in self._tags_for_targets().items():
-            self._add_or_update(target, tag, require_existing=True)
+        for tag, entry in self._entries():
+            self._save_entry(tag, entry)
         self._run_hooks("save", "post")
         return 0
 
@@ -378,49 +378,37 @@ class Hamstercage:
         self.manifest.dump()
         return 0
 
-    def _add_or_update(
-        self, path: str, tag: str, ignore_existing=False, require_existing=False
+    def _add_entry(
+        self,
+        tag: str,
+        file,
+        ignore_existing=False,
     ) -> Entry:
         """
         Add a new file to, or update its contents and attributes in the repo.
 
         By default, it is an error if the repo file exists, and no error if the repo file doesn't exist.
 
-        :param path: the target path of the file to be added/updated
         :param tag: the tag to update
         :param ignore_existing: it is not an error if the file already exists in the repo (default False)
-        :param require_existing: it is an error if the file doesn't exist in the repo (default False)
         :return: the updated entry
         """
         if tag not in self.manifest.tags:
             raise HamstercageException(f"no tag {tag} in manifest")
         entries = self.manifest.tags[tag].entries
-        (manifest_path, target_path) = self._normalize_target_path(path)
-        entry = Entry.entry(manifest_path, target_path)
-        if require_existing:
-            if entry.path not in entries:
-                raise HamstercageException(
-                    f"Unable to update {path}: no entry {manifest_path} in manifest for tag {tag}"
-                )
-        elif not ignore_existing:
+        (repo_path, target_path) = self._normalize_target_path(file)
+        entry = Entry.entry(repo_path, target_path)
+        if not ignore_existing:
             if entry.path in entries:
                 raise HamstercageException(
-                    f"Unable to add {path}: already added to tag {tag}"
+                    f"Unable to add {target_path}: already added to tag {tag}"
                 )
-        entries[manifest_path] = entry
-        if entry.has_repo():
-            repo = self._path_repo_absolute(self.tags[0], entry)
-            if repo.exists() and not repo.is_file():
-                raise HamstercageException(
-                    f"Unable to add {repo} to tag {tag}: another directory entry already exists here"
-                )
-            try:
-                self._mkdir_repo(self._path_repo_relative(self.tags[0], entry).parent)
-                shutil.copy2(entry.target, repo, follow_symlinks=False)
-                shutil.chown(repo, self.manifest.owner, self.manifest.group)
-                repo.chmod(self.manifest.file_mode)
-            except FileNotFoundError as e:
-                raise HamstercageException(f"Unable to add {repo} to tag {tag}: {e}", e)
+        entries[repo_path] = entry
+        return entry
+
+    def _save_entry(self, tag: str, entry: Entry):
+        (repo_path, target_path) = self._normalize_target_path(entry.path)
+        entry.save(self._path_repo_path_tag(repo_path, tag), target_path, self.manifest)
         return entry
 
     @staticmethod
@@ -456,7 +444,7 @@ class Hamstercage:
         """
         Generator that produces all entries, potentially filtered by the list of files given on the command line. Only
         returns entries for the first match for a path.
-        :return:
+        :return: (tag, entry)
         """
         paths = {}
         for t in self.tags:
@@ -487,8 +475,9 @@ class Hamstercage:
         """
         if len(self.files) == 0:
             return True
-        for f in self.files:
-            if Path(entry.path).match(self._normalize_path(f)):
+        for file in self.files:
+            (repo_path, target_path) = self._normalize_target_path(file)
+            if entry.path == repo_path:
                 return True
         return False
 
@@ -555,21 +544,6 @@ class Hamstercage:
         print(f"{prefix} {str(path)}\tmissing")
         return True
 
-    def _normalize_path(self, path: str) -> str:
-        """
-        Returns the normalized path for the given path.
-        :param path:
-        :return:
-        """
-        path = str(path)
-        if path.startswith(str(self.target)):
-            path = path[len(str(self.target)) :]
-        if path.startswith("/"):
-            path = path[1:]
-        if path.endswith("/"):
-            path = path[0:-1]
-        return path
-
     def _normalize_target_path(self, path: Union[str, Path]) -> (str, Path):
         """
         Returns two paths: the path as it should be entered into the manifest, and the filesystem path for the target
@@ -591,23 +565,17 @@ class Hamstercage:
                 #
                 return "/" + str(path), Path(str(self.target) + "/" + str(path))
 
-    def _path_repo_absolute(self, tag: str, entry: Entry) -> Path:
+    def _path_repo_entry(self, tag: str, entry: Entry) -> Path:
         """
         Return the absolute path for the file of the entry.
         :param tag: the tag for this entry
         :param entry: of the file
         :return: path of file
         """
-        return self.repo.joinpath(self._path_repo_relative(tag, entry))
+        return entry.path_as_child_of(self.repo / "tags" / tag)
 
-    def _path_repo_relative(self, tag: str, entry: Entry):
-        """
-        Return the relative path for the file of the entry.
-        :param tag: the tag for this entry
-        :param entry: of the file
-        :return: path of file
-        """
-        return entry.path_as_child_of(Path("tags") / tag)
+    def _path_repo_path_tag(self, repo_path, tag: str):
+        return path_as_child_of(repo_path, self.repo / "tags" / tag)
 
     def _path_target(self, entry: Entry) -> Path:
         """
@@ -647,18 +615,6 @@ class Hamstercage:
             if r != 0:
                 return r
         return 0
-
-    def _tags_for_targets(self) -> dict:
-        """
-        Builds a list of files that should be processed. Resolved duplicate entries consistently.
-        :return:
-        """
-        files: dict = {}
-        for t, entry in self._entries():
-            if entry.path in files:
-                continue
-            files[entry.path] = t
-        return files
 
 
 def main():
