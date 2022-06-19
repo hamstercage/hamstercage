@@ -285,7 +285,7 @@ class SymlinkEntry(Entry):
             raise HamstercageException(
                 f'Unable to save "{target_path}" because it is not a symbolic link'
             )
-        self.target = str(target_path.resolve())
+        self.target = str(os.readlink(target_path))
 
     def __str__(self):
         return f"SymlinkEntry<form={self.form}, path={self.path}, target={self.target}>"
