@@ -348,7 +348,7 @@ class Hamstercage:
                     args.tag, self.manifest.tags[args.tag].entries[file]
                 )
                 del self.manifest.tags[args.tag].entries[file]
-                repo.unlink()
+                repo.unlink(missing_ok=True)
             else:
                 print(
                     f"Unable to remove {file}: no such entry in tag {args.tag}",
