@@ -46,7 +46,10 @@ class Entry(ABC):
         :return:
         """
         if isinstance(e, Path):
-            if e.is_dir():
+            if e.is_symlink():
+                # is_dir() and is_file return true if the target is dir or file, so check for symlink first
+                return SymlinkEntry.from_dict(path, {"target": str(e.resolve())})
+            elif e.is_dir():
                 return DirEntry.from_dict(
                     path,
                     {
@@ -67,8 +70,6 @@ class Entry(ABC):
                         "group": e.group(),
                     },
                 )
-            elif e.is_symlink():
-                return SymlinkEntry.from_dict(path, {"target": str(e.resolve())})
             raise HamstercageException(
                 f'Unable to create entry for "{path}": unknown file type'
             )
