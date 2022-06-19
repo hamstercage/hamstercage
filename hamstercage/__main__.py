@@ -294,15 +294,15 @@ class Hamstercage:
                 else:
                     status = "!"
                 if isinstance(entry, FileEntry):
-                    if list(self._diff(path, item.repo)):
+                    if path.exists() and list(self._diff(path, item.repo)):
                         status = "*"
-                if isinstance(entry, DirEntry):
+                elif isinstance(entry, DirEntry):
                     name = name + "/"
                     type = "d"
-                if isinstance(entry, SymlinkEntry):
+                elif isinstance(entry, SymlinkEntry):
                     name = name + " -> " + entry.target
                     type = "l"
-                    if os.readlink(path) != entry.target:
+                    if path.exists() and os.readlink(path) != entry.target:
                         status = "*"
                 lines.append(
                     [
