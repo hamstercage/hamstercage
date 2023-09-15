@@ -491,11 +491,11 @@ class Tag:
             d["description"] = self.description
         if len(self.entries) > 0:
             d["entries"] = {}
-            for (path, entry) in self.entries.items():
+            for path, entry in self.entries.items():
                 d["entries"][path] = entry.to_dict()
         if len(self.hooks) > 0:
             d["hooks"] = {}
-            for (path, entry) in self.hooks.items():
+            for path, entry in self.hooks.items():
                 d["hooks"][path] = entry.to_dict()
         return d
 

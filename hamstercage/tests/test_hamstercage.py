@@ -300,7 +300,7 @@ class TestHamstercage(TestCase):
         dut = self.perform_add_many()
 
         entries = {}
-        for (t, e) in dut._entries():
+        for t, e in dut._entries():
             entries[e.path] = (t, e)
         assert len(entries) == 3
         assert "/foo.txt" in entries
@@ -330,7 +330,7 @@ class TestHamstercage(TestCase):
         self.assertEqual(0, r)
 
         entries = {}
-        for (t, e) in dut._entries():
+        for t, e in dut._entries():
             entries[e.path] = (t, e)
         assert len(entries) == 1
         assert "/foo.txt" in entries
