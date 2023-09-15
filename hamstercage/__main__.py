@@ -153,11 +153,11 @@ class Hamstercage:
         tagparsers = subparser.add_subparsers(help="tag command help")
 
         subparser = tagparsers.add_parser(
-            "tag",
-            help="manage tags in the manifest",
+            "add",
+            help="add a tag to the manifest",
         )
         subparser.set_defaults(func=self.tag_add)
-        subparser.add_argument("name", nargs=1, help="tag name")
+        subparser.add_argument("name", help="tag name")
         subparser.add_argument(
             "-d",
             "--description",

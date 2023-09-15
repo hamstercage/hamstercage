@@ -161,6 +161,9 @@ class TestHamstercage(TestCase):
         self.assertFalse((dut.repo / "tags" / "all" / link_to_add).exists())
 
     def test_add_many(self) -> Hamstercage:
+        self.perform_add_many()
+
+    def perform_add_many(self) -> Hamstercage:
         dut = self.prepare_hamstercage()
 
         self.dir_to_add = "a-dir"
@@ -188,7 +191,10 @@ class TestHamstercage(TestCase):
         return dut
 
     def test_apply(self):
-        dut = self.test_add_many()
+        self.perform_apply()
+
+    def perform_apply(self):
+        dut = self.perform_add_many()
         hook_status_file = self.tmpdir / "hook-ran"
         hook = Hook.from_dict(
             "post-apply",
@@ -218,7 +224,10 @@ class TestHamstercage(TestCase):
         RUNNING_ON_GITHUB, "Github runner does not support mode bits on /tmp"
     )
     def test_apply_mode_change(self):
-        dut = self.test_add_many()
+        self.perform_apply_mode_change()
+
+    def perform_apply_mode_change(self):
+        dut = self.perform_add_many()
         hook_status_file = self.tmpdir / "hook-ran"
         hook = Hook.from_dict(
             "post-apply",
@@ -245,7 +254,7 @@ class TestHamstercage(TestCase):
         return dut
 
     def test_apply_target_exists(self):
-        dut = self.test_apply()
+        dut = self.perform_apply()
 
         dir_to_add = "a-dir"
         dir_path = dut.target / dir_to_add
@@ -264,14 +273,14 @@ class TestHamstercage(TestCase):
             r = dut.apply(args)
 
     def test_diff_unchanged(self):
-        dut = self.test_add_many()
+        dut = self.perform_add_many()
 
         args = Args(files=[])
         r = dut.diff(args)
         self.assertEqual(0, r)
 
     def test_diff_changed(self):
-        dut = self.test_add_many()
+        dut = self.perform_add_many()
 
         self.file_path.write_text("Goodbye, world!", "utf-8")
 
@@ -280,7 +289,7 @@ class TestHamstercage(TestCase):
         self.assertEqual(1, r)
 
     def test_diff_missing(self):
-        dut = self.test_add_many()
+        dut = self.perform_add_many()
         self.file_path.unlink()
 
         args = Args(files=[])
@@ -288,7 +297,7 @@ class TestHamstercage(TestCase):
         self.assertEqual(1, r)
 
     def test_entries(self):
-        dut = self.test_add_many()
+        dut = self.perform_add_many()
 
         entries = {}
         for (t, e) in dut._entries():
@@ -345,7 +354,7 @@ class TestHamstercage(TestCase):
         )
 
     def test_list_short(self):
-        dut = self.test_add_many()
+        dut = self.perform_add_many()
         out = io.StringIO()
 
         args = Args(files=[], long=0)
@@ -364,7 +373,7 @@ class TestHamstercage(TestCase):
         )
 
     def test_list_long(self):
-        dut = self.test_add_many()
+        dut = self.perform_add_many()
         out = io.StringIO()
 
         args = Args(files=[], long=1)
@@ -391,7 +400,7 @@ class TestHamstercage(TestCase):
         )
 
     def test_list_long_one(self):
-        dut = self.test_add_many()
+        dut = self.perform_add_many()
         out = io.StringIO()
 
         args = Args(files=[str(self.file_path)], long=1)
@@ -410,7 +419,7 @@ class TestHamstercage(TestCase):
         )
 
     def test_list_long_missing(self):
-        dut = self.test_add_many()
+        dut = self.perform_add_many()
         out = io.StringIO()
         self.file_path.unlink()
 
@@ -472,7 +481,7 @@ class TestHamstercage(TestCase):
         self.assertFalse((dut.repo / "tags" / "all" / file_to_add).exists())
 
     def test_save(self):
-        dut = self.test_add_many()
+        dut = self.perform_add_many()
         dut.tags = ["other", "all"]
         dut.manifest.dump()
 
