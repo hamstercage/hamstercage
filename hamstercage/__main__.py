@@ -432,11 +432,13 @@ class Hamstercage:
                 t = f.readlines()
         except Exception as e:
             print(f"warning: unable to diff {target}: {e}", file=sys.stderr)
+            return ""
         try:
             with open(repo) as f:
                 r = f.readlines()
         except Exception as e:
             print(f"warning: unable to diff {repo}: {e}", file=sys.stderr)
+            return ""
         return unified_diff(
             r,
             t,
