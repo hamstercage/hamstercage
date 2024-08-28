@@ -427,10 +427,16 @@ class Hamstercage:
             if not repo.exists():
                 r.append(f"! {repo} not found")
             return r
-        with open(target) as f:
-            t = f.readlines()
-        with open(repo) as f:
-            r = f.readlines()
+        try:
+            with open(target) as f:
+                t = f.readlines()
+        except Exception as e:
+            print(f'warning: unable to diff {target}: {e}', file=sys.stderr)
+        try:
+            with open(repo) as f:
+                r = f.readlines()
+        except Exception as e:
+            print(f'warning: unable to diff {repo}: {e}', file=sys.stderr)
         return unified_diff(
             r,
             t,
