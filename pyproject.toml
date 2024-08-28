@@ -36,7 +36,7 @@ build-backend = "poetry.core.masonry.api"
 
 [dependencies]
 # poetry ignores this section and uses it's own.
-python = "^3.8"
+python = ">=3.8,<4.0"
 PyYAML = "^6.0"
 importlib-resources = "^5.7.1"
 
@@ -81,9 +81,13 @@ PyYAML = "^6.0.1"
 importlib-resources = "^6.0.1"
 
 [tool.poetry.dev-dependencies]
-pytest = "^7.1.2"
-black = "^23.9.0"
+pytest = "^8.0.0"
+black = "^24.1.1"
 coverage = "^7.3.1"
 
 [tool.poetry.scripts]
 hamstercage = "hamstercage:__main__.main"
+
+[tool.poetry.group.dev.dependencies]
+setuptools = "^69.0.3"
+
