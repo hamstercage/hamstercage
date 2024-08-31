@@ -454,7 +454,7 @@ class TestHamstercage(TestCase):
         self.link_path.write_text("Hello, world!", "utf-8")
 
         args = Args(files=[str(self.link_path)], long=1)
-        r = dut.list(args, file=out)
+        r = dut.list(args)
         self.assertEqual(0, r)
         ts_link = datetime.fromtimestamp(os.stat(self.link_path).st_mtime).strftime(
             "%H:%M"
