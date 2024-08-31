@@ -258,13 +258,11 @@ class Hamstercage:
         manifest.dump()
         return 0
 
-    def list(self, args, file=None):
+    def list(self, args):
         """
         Print a list of all manifest entries
         :return:
         """
-        if file is None:
-            out = sys.stdout
         self._load_manifest()
         self.files = args.files
         items = {}
@@ -275,7 +273,7 @@ class Hamstercage:
                 items[target] = ListEntry(e, repo, t)
         if args.long == 0:
             for path in sorted(items):
-                print(path, file=file)
+                print(path)
         else:
             lines = []
             for path in sorted(items):
@@ -316,7 +314,7 @@ class Hamstercage:
                         name,
                     ]
                 )
-            print_table(lines, align=["<", "<", "<", "<", ">"], file=file)
+            print_table(lines, align=["<", "<", "<", "<", ">"])
         # widths = [0] * 8
         # align = ["<", "<", "<", "<", ">", "<", "<", "<"]
         # for line in lines:

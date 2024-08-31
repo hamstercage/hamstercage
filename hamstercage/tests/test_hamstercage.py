@@ -302,8 +302,10 @@ class TestHamstercage(TestCase):
         self.file_path.unlink()
 
         args = Args(files=[])
-        r = dut.diff(args)
+        with redirect_stdout(io.StringIO()) as stdout:
+            r = dut.diff(args)
         self.assertEqual(1, r)
+        self.assertEqual("missing\n", stdout.getvalue()[-8:])
 
     def test_diff_unchanged(self):
         dut = self.perform_add_many()
@@ -373,10 +375,10 @@ class TestHamstercage(TestCase):
 
     def test_list_short(self):
         dut = self.perform_add_many()
-        out = io.StringIO()
 
         args = Args(files=[], long=0)
-        r = dut.list(args, file=out)
+        with redirect_stdout(io.StringIO()) as stdout:
+            r = dut.list(args)
         self.assertEqual(0, r)
 
         t = datetime.fromtimestamp(os.stat(self.file_path).st_mtime).strftime("%H:%M")
@@ -387,15 +389,15 @@ class TestHamstercage(TestCase):
                 str(self.file_path),
                 "",
             ],
-            out.getvalue().split("\n"),
+            stdout.getvalue().split("\n"),
         )
 
     def test_list_long(self):
         dut = self.perform_add_many()
-        out = io.StringIO()
 
         args = Args(files=[], long=1)
-        r = dut.list(args, file=out)
+        with redirect_stdout(io.StringIO()) as stdout:
+            r = dut.list(args)
         self.assertEqual(0, r)
 
         ts_dir = datetime.fromtimestamp(os.stat(self.dir_path).st_mtime).strftime(
@@ -414,15 +416,15 @@ class TestHamstercage(TestCase):
                 f" \t-rw-r--r--\t{self.user}\t{self.group}\t13\t{ts_file}\tall\t{self.file_path}",
                 "",
             ],
-            out.getvalue().split("\n"),
+            stdout.getvalue().split("\n"),
         )
 
     def test_list_long_one(self):
         dut = self.perform_add_many()
-        out = io.StringIO()
 
         args = Args(files=[str(self.file_path)], long=1)
-        r = dut.list(args, file=out)
+        with redirect_stdout(io.StringIO()) as stdout:
+            r = dut.list(args)
         self.assertEqual(0, r)
 
         ts_file = datetime.fromtimestamp(os.stat(self.file_path).st_mtime).strftime(
@@ -433,21 +435,23 @@ class TestHamstercage(TestCase):
                 f" \t-rw-r--r--\t{self.user}\t{self.group}\t13\t{ts_file}\tall\t{self.file_path}",
                 "",
             ],
-            out.getvalue().split("\n"),
+            stdout.getvalue().split("\n"),
         )
 
     def test_list_long_missing(self):
         dut = self.perform_add_many()
-        out = io.StringIO()
         self.file_path.unlink()
 
         args = Args(files=[str(self.file_path)], long=1)
-        r = dut.list(args, file=out)
+        with redirect_stdout(io.StringIO()) as stdout:
+            r = dut.list(args)
         self.assertEqual(0, r)
 
     def test_main(self):
         dut = self.prepare_hamstercage()
-        dut.main([])
+        with redirect_stdout(io.StringIO()) as stdout:
+            r = dut.main([])
+        self.assertEqual(64, r)
 
     def test_normalize_target_path(self):
         dut = self.prepare_hamstercage()
