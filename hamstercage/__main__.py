@@ -430,15 +430,14 @@ class Hamstercage:
         try:
             with open(target) as f:
                 t = f.readlines()
-        except Exception as e:
-            print(f"warning: unable to diff {target}: {e}", file=sys.stderr)
-            return ""
-        try:
             with open(repo) as f:
                 r = f.readlines()
-        except Exception as e:
-            print(f"warning: unable to diff {repo}: {e}", file=sys.stderr)
-            return ""
+        except UnicodeDecodeError as e:
+            return ["binary files differ"]
+        if r[-1][-1:] != "\n":
+            r[-1] += "\n"
+        if t[-1][-1:] != "\n":
+            t[-1] += "\n"
         return unified_diff(
             r,
             t,

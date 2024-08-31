@@ -1,6 +1,7 @@
 import io
 import os
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
 from unittest import TestCase
@@ -272,12 +273,16 @@ class TestHamstercage(TestCase):
         with self.assertRaises(HamstercageException):
             r = dut.apply(args)
 
-    def test_diff_unchanged(self):
+    def test_diff_binary(self):
         dut = self.perform_add_many()
 
+        self.file_path.write_bytes(b"\xc3\x28")
+
         args = Args(files=[])
-        r = dut.diff(args)
-        self.assertEqual(0, r)
+        with redirect_stdout(io.StringIO()) as stdout:
+            r = dut.diff(args)
+        self.assertEqual(1, r)
+        self.assertEqual("binary files differ", stdout.getvalue().strip())
 
     def test_diff_changed(self):
         dut = self.perform_add_many()
@@ -285,8 +290,12 @@ class TestHamstercage(TestCase):
         self.file_path.write_text("Goodbye, world!", "utf-8")
 
         args = Args(files=[])
-        r = dut.diff(args)
+        with redirect_stdout(io.StringIO()) as stdout:
+            r = dut.diff(args)
         self.assertEqual(1, r)
+        lines = stdout.getvalue().splitlines()
+        self.assertEqual("-Hello, world!", lines[-2])
+        self.assertEqual("+Goodbye, world!", lines[-1])
 
     def test_diff_missing(self):
         dut = self.perform_add_many()
@@ -295,6 +304,15 @@ class TestHamstercage(TestCase):
         args = Args(files=[])
         r = dut.diff(args)
         self.assertEqual(1, r)
+
+    def test_diff_unchanged(self):
+        dut = self.perform_add_many()
+
+        args = Args(files=[])
+        with redirect_stdout(io.StringIO()) as stdout:
+            r = dut.diff(args)
+        self.assertEqual(0, r)
+        self.assertEqual("", stdout.getvalue().strip())
 
     def test_entries(self):
         dut = self.perform_add_many()
