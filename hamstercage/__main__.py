@@ -302,7 +302,9 @@ class Hamstercage:
                 elif isinstance(entry, SymlinkEntry):
                     name = name + " -> " + entry.target
                     type = "l"
-                    if path.exists() and os.readlink(path) != entry.target:
+                    if path.exists() and path.is_file():
+                        status = "!"
+                    elif path.exists() and os.readlink(path) != entry.target:
                         status = "*"
                 lines.append(
                     [

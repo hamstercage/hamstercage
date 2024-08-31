@@ -427,6 +427,26 @@ class TestHamstercage(TestCase):
         r = dut.list(args, file=out)
         self.assertEqual(0, r)
 
+    def test_list_long_regular_instead_of_link(self):
+        dut = self.perform_add_many()
+        out = io.StringIO()
+        self.link_path.unlink()
+        self.link_path.write_text("Hello, world!", "utf-8")
+
+        args = Args(files=[str(self.link_path)], long=1)
+        r = dut.list(args, file=out)
+        self.assertEqual(0, r)
+        ts_link = datetime.fromtimestamp(os.stat(self.link_path).st_mtime).strftime(
+            "%H:%M"
+        )
+        self.assertEqual(
+            [
+                f"!\tlrw-r--r--\troot\troot\t13\t{ts_link}\tall\t{self.link_path} -> /dev/null",
+                "",
+            ],
+            out.getvalue().split("\n"),
+        )
+
     def test_main(self):
         dut = self.prepare_hamstercage()
         dut.main([])
