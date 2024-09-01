@@ -31,6 +31,7 @@ def ensure_last_line_ends_in_newline(lines: List[str]):
     if lines[-1][-1] != "\n":
         lines[-1] += "\n"
 
+
 def mkdir_with_owner_group_mode(path: Path, owner: str, group: str, mode: int):
     """
     Create the directory path, including all parents. The new directories will be owned and have the permissions
