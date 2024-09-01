@@ -15,6 +15,7 @@ from hamstercage.hamstercage_exception import HamstercageException
 from hamstercage.manifest import Host, Tag, Entry, DirEntry, SymlinkEntry, FileEntry
 from hamstercage.utils import (
     chmod,
+    ensure_last_line_ends_in_newline,
     mode_to_str,
     short_date,
     print_table,
@@ -434,10 +435,8 @@ class Hamstercage:
                 r = f.readlines()
         except UnicodeDecodeError as e:
             return ["binary files differ"]
-        if r[-1][-1:] != "\n":
-            r[-1] += "\n"
-        if t[-1][-1:] != "\n":
-            t[-1] += "\n"
+        ensure_last_line_ends_in_newline(r)
+        ensure_last_line_ends_in_newline(t)
         return unified_diff(
             r,
             t,

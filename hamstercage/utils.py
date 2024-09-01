@@ -1,7 +1,7 @@
 import os
 import shutil
 import stat
-from typing import Union
+from typing import List, Union
 
 import sys
 
@@ -22,6 +22,14 @@ def chmod(path, mode):
     else:
         pass
 
+
+def ensure_last_line_ends_in_newline(lines: List[str]):
+    if len(lines) == 0:
+        return
+    if len(lines[-1]) == 0:
+        lines[-1] = "\n"
+    if lines[-1][-1] != "\n":
+        lines[-1] += "\n"
 
 def mkdir_with_owner_group_mode(path: Path, owner: str, group: str, mode: int):
     """
